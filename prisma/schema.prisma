@@ -1,0 +1,146 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum TaskStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  DONE
+  AT_RISK
+  DELAYED
+}
+
+model Workstream {
+  id        String   @id @default(cuid())
+  name      String
+  color     String
+  owner     String   @default("")
+  goal      String   @default("")
+  position  Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tasks     Task[]
+}
+
+model Task {
+  id           String           @id @default(cuid())
+  workstreamId String
+  workstream   Workstream       @relation(fields: [workstreamId], references: [id], onDelete: Cascade)
+  name         String
+  owner        String           @default("")
+  start        DateTime         @db.Date
+  end          DateTime         @db.Date
+  progress     Int
+  status       TaskStatus
+  isMilestone  Boolean
+  description  String           @default("") @db.Text
+  position     Int
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  dependsOn    TaskDependency[] @relation("Dependent")
+  dependents   TaskDependency[] @relation("Prerequisite")
+
+  @@index([workstreamId, position])
+}
+
+enum TaskEventType {
+  COMPLETED
+  DELETED
+}
+
+// Audit trail for /v2 History. Deliberately no foreign keys: it must outlive the task and workstream it describes,
+// so it keeps its own copy of the names.
+model TaskEvent {
+  id             String        @id @default(cuid())
+  type           TaskEventType
+  at             DateTime      @default(now())
+  taskId         String
+  taskName       String
+  workstreamId   String
+  workstreamName String
+  owner          String        @default("")
+  actor          String? // username at the time; null for backfilled rows
+  note           String        @default("")
+
+  @@index([at(sort: Desc), id(sort: Desc)])
+  @@index([workstreamId])
+  @@index([owner])
+}
+
+model TaskDependency {
+  taskId      String
+  dependsOnId String
+  task        Task   @relation("Dependent", fields: [taskId], references: [id], onDelete: Cascade)
+  dependsOn   Task   @relation("Prerequisite", fields: [dependsOnId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, dependsOnId])
+  @@index([dependsOnId])
+}
+
+model User {
+  id                 String    @id @default(cuid())
+  username           String    @unique
+  passwordHash       String
+  roleId             String
+  role               Role      @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  isActive           Boolean   @default(true)
+  mustChangePassword Boolean   @default(false)
+  lastLoginAt        DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  sessions           Session[]
+
+  @@index([roleId])
+}
+
+model Role {
+  id          String           @id @default(cuid())
+  name        String           @unique
+  description String           @default("")
+  isSystem    Boolean          @default(false)
+  permissions RolePermission[]
+  users       User[]
+}
+
+model Permission {
+  id          String           @id @default(cuid())
+  key         String           @unique
+  description String           @default("")
+  roles       RolePermission[]
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model LoginAttempt {
+  id        String   @id @default(cuid())
+  key       String
+  createdAt DateTime @default(now())
+
+  @@index([key, createdAt])
+  @@index([createdAt])
+}

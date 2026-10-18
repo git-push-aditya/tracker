@@ -1,0 +1,461 @@
+{
+  "workstreams": [
+    {
+      "id": "product",
+      "name": "Product",
+      "color": "#2a78d6",
+      "owner": "Ananya Rao",
+      "goal": "Ship Prime Care v2 — one patient app for appointments, care plans and records — and lift weekly active patients by 30%.",
+      "tasks": [
+        {
+          "id": "p1",
+          "name": "Patient onboarding redesign",
+          "owner": "Ananya Rao",
+          "start": "2026-09-01",
+          "end": "2026-10-30",
+          "progress": 75,
+          "status": "In progress",
+          "isMilestone": false,
+          "dependsOn": [],
+          "description": "**What:** Rebuilding sign-up and first-visit flows: phone-number login, insurance card scan, and a 3-question health profile instead of the current 14-field form.\n\n**Why:** 41% of new users drop off before booking their first consult. Usability sessions show the long form and unclear consent screens are the main causes.\n\n**Blockers:**\n- Legal sign-off on the new consent copy (expected this week)\n\n**Next steps:**\n- Finish build of insurance scan (OCR vendor integrated)\n- A/B test new flow with 20% of traffic from 26 Oct\n- Target: first-booking conversion from 59% to 70%"
+        },
+        {
+          "id": "p2",
+          "name": "Care-plan tracker (MVP)",
+          "owner": "Rohan Mehta",
+          "start": "2026-10-12",
+          "end": "2026-12-18",
+          "progress": 20,
+          "status": "In progress",
+          "isMilestone": false,
+          "dependsOn": [
+            "p1"
+          ],
+          "description": "**What:** A daily view of each patient's care plan — medications, vitals to log, follow-up appointments — with reminders.\n\n**Why:** Chronic-care patients (diabetes, hypertension) are our highest-value cohort; doctors asked for a way to see adherence between visits.\n\n**Blockers:**\n- Needs the FHIR gateway (Tech Integrations) to read prescriptions\n\n**Next steps:**\n- Finalise designs with 5 partner doctors\n- Build medication reminder service\n- Beta with 200 patients in December"
+        },
+        {
+          "id": "p3",
+          "name": "Accessibility audit (WCAG 2.2 AA)",
+          "owner": "Meera Iyer",
+          "start": "2026-11-02",
+          "end": "2026-11-27",
+          "progress": 0,
+          "status": "Not started",
+          "isMilestone": false,
+          "dependsOn": [],
+          "description": "**What:** External audit of the patient app and web portal against WCAG 2.2 AA, followed by fixes.\n\n**Why:** Many of our patients are older adults; enterprise customers also require an accessibility statement in contracts.\n\n**Next steps:**\n- Confirm audit vendor and scope\n- Reserve 1 sprint of engineering capacity for fixes"
+        },
+        {
+          "id": "p4",
+          "name": "Prime Care v2 public launch",
+          "owner": "Ananya Rao",
+          "start": "2027-01-15",
+          "end": "2027-01-15",
+          "progress": 0,
+          "status": "Not started",
+          "isMilestone": true,
+          "dependsOn": [
+            "p2",
+            "p3",
+            "i3"
+          ],
+          "description": "**Milestone:** v2 available to all patients on iOS, Android and web.\n\n**Launch criteria:**\n- Care-plan tracker out of beta with crash-free rate above 99.5%\n- e-Prescription flow live with at least 2 pharmacy partners\n- Accessibility fixes from the audit shipped"
+        },
+        {
+          "id": "p5",
+          "name": "Post-launch usability study",
+          "owner": "Meera Iyer",
+          "start": "2027-01-25",
+          "end": "2027-03-05",
+          "progress": 0,
+          "status": "Not started",
+          "isMilestone": false,
+          "dependsOn": [
+            "p4"
+          ],
+          "description": "**What:** 20 moderated sessions plus in-app survey after launch.\n\n**Why:** Validate that v2 actually reduces the effort to book and follow care plans, and prioritise the Q2 roadmap."
+        }
+      ]
+    },
+    {
+      "id": "tech",
+      "name": "Tech Integrations",
+      "color": "#eb6834",
+      "owner": "Karthik Nair",
+      "goal": "Connect Prime Care to labs, pharmacies and hospital records through secure, standards-based (FHIR) interfaces.",
+      "tasks": [
+        {
+          "id": "i1",
+          "name": "FHIR R4 integration gateway",
+          "owner": "Karthik Nair",
+          "start": "2026-08-17",
+          "end": "2026-10-09",
+          "progress": 90,
+          "status": "In progress",
+          "isMilestone": false,
+          "dependsOn": [],
+          "description": "**What:** A central gateway that translates partner data (HL7v2, CSV, proprietary APIs) into FHIR R4 resources, with audit logging and consent checks.\n\n**Why:** Every downstream integration (labs, pharmacies, hospitals) plugs into this, so we build security and compliance once.\n\n**Blockers:**\n- Two high-severity findings from the penetration test are still open\n\n**Next steps:**\n- Fix token-expiry and logging findings; re-test on 20 Oct\n- Production sign-off by CISO"
+        },
+        {
+          "id": "i2",
+          "name": "Lab results integration",
+          "owner": "Divya Menon",
+          "start": "2026-10-05",
+          "end": "2026-12-11",
+          "progress": 30,
+          "status": "At risk",
+          "isMilestone": false,
+          "dependsOn": [
+            "i1"
+          ],
+          "description": "**What:** Receive lab reports from 3 partner lab chains directly into the patient record, with abnormal values flagged for the doctor.\n\n**Why:** Today patients upload PDFs manually; 30% of follow-up consults are delayed waiting for reports.\n\n**Blockers:**\n- Largest partner lab has not shared its API sandbox yet\n- Depends on the FHIR gateway going live\n\n**Next steps:**\n- Escalate sandbox access with the partner's CTO\n- Start with the two labs that are ready"
+        },
+        {
+          "id": "i3",
+          "name": "e-Prescription & pharmacy API",
+          "owner": "Karthik Nair",
+          "start": "2026-11-09",
+          "end": "2027-01-08",
+          "progress": 0,
+          "status": "Not started",
+          "isMilestone": false,
+          "dependsOn": [
+            "i1"
+          ],
+          "description": "**What:** Doctors issue digital prescriptions that are routed to the patient's chosen pharmacy for delivery or pickup.\n\n**Why:** A launch requirement for v2 and a new revenue line through pharmacy partnerships.\n\n**Next steps:**\n- Shortlist 2 pharmacy partners\n- Confirm regulatory requirements for digital signatures"
+        },
+        {
+          "id": "i4",
+          "name": "National health ID linking",
+          "owner": "Divya Menon",
+          "start": "2026-12-01",
+          "end": "2027-02-26",
+          "progress": 0,
+          "status": "Not started",
+          "isMilestone": false,
+          "dependsOn": [],
+          "description": "**What:** Let patients link their national health ID so records from other providers can be pulled in with consent.\n\n**Why:** Gives doctors a fuller history and positions Prime Care for public-health programmes."
+        }
+      ]
+    },
+    {
+      "id": "growth",
+      "name": "Growth & CRM",
+      "color": "#1baf7a",
+      "owner": "Sana Qureshi",
+      "goal": "Build a lifecycle engine that turns sign-ups into active, retained patients — target 35% 90-day retention.",
+      "tasks": [
+        {
+          "id": "g1",
+          "name": "CRM platform migration",
+          "owner": "Sana Qureshi",
+          "start": "2026-09-07",
+          "end": "2026-10-30",
+          "progress": 60,
+          "status": "In progress",
+          "isMilestone": false,
+          "dependsOn": [],
+          "description": "**What:** Move patient lifecycle data from spreadsheets and the legacy email tool into a single CRM with event tracking.\n\n**Why:** We can't personalise outreach or measure retention by cohort today.\n\n**Blockers:**\n- Data-processing agreement with the CRM vendor under legal review\n\n**Next steps:**\n- Complete event schema (sign-up, booking, consult, refill)\n- Migrate 180k contacts with consent flags"
+        },
+        {
+          "id": "g2",
+          "name": "Onboarding journeys (email / SMS / WhatsApp)",
+          "owner": "Arjun Das",
+          "start": "2026-10-19",
+          "end": "2026-12-04",
+          "progress": 0,
+          "status": "Not started",
+          "isMilestone": false,
+          "dependsOn": [
+            "g1"
+          ],
+          "description": "**What:** Automated first-30-day journeys: welcome, book your first consult, complete your health profile, set up reminders.\n\n**Why:** Patients who book within 7 days of sign-up are 3x more likely to still be active at 90 days.\n\n**Next steps:**\n- Draft copy with clinical review\n- Set up control group for measurement"
+        },
+        {
+          "id": "g3",
+          "name": "Referral programme pilot",
+          "owner": "Arjun Das",
+          "start": "2026-12-07",
+          "end": "2027-02-12",
+          "progress": 0,
+          "status": "Not started",
+          "isMilestone": false,
+          "dependsOn": [
+            "g2"
+          ],
+          "description": "**What:** Give-a-consult, get-a-consult referral rewards for existing patients.\n\n**Why:** Word of mouth is our cheapest channel; pilot to test whether incentives grow it."
+        },
+        {
+          "id": "g4",
+          "name": "Retention dashboard & cohort reporting",
+          "owner": "Sana Qureshi",
+          "start": "2026-11-16",
+          "end": "2027-01-08",
+          "progress": 0,
+          "status": "Not started",
+          "isMilestone": false,
+          "dependsOn": [
+            "g1"
+          ],
+          "description": "**What:** Weekly cohort retention, activation funnel and channel attribution for leadership.\n\n**Why:** One shared source of truth for growth metrics before the v2 launch."
+        }
+      ]
+    },
+    {
+      "id": "sales",
+      "name": "Sales",
+      "color": "#eda100",
+      "owner": "Vikram Shah",
+      "goal": "Sign 10 employer and clinic partners for Prime Care's B2B care programme by the end of Q1 2027.",
+      "tasks": [
+        {
+          "id": "s1",
+          "name": "Sales deck & pricing model",
+          "owner": "Vikram Shah",
+          "start": "2026-09-14",
+          "end": "2026-10-09",
+          "progress": 100,
+          "status": "Done",
+          "isMilestone": false,
+          "dependsOn": [],
+          "description": "**Done:** Per-employee-per-month pricing with three tiers, ROI calculator and case-study deck approved by leadership on 8 Oct."
+        },
+        {
+          "id": "s2",
+          "name": "Employer pilot — 3 corporate clients",
+          "owner": "Neha Kapoor",
+          "start": "2026-10-05",
+          "end": "2026-12-31",
+          "progress": 35,
+          "status": "In progress",
+          "isMilestone": false,
+          "dependsOn": [
+            "s1"
+          ],
+          "description": "**What:** 90-day pilots offering Prime Care as an employee health benefit at three companies (≈4,500 employees in total).\n\n**Why:** Pilot results are our proof point for larger enterprise deals.\n\n**Status:**\n- 2 of 3 pilots live; third starts 1 Nov\n- Early activation at 22% of eligible employees\n\n**Next steps:**\n- Run on-site health camps to lift activation\n- Mid-pilot review with HR teams in late November"
+        },
+        {
+          "id": "s3",
+          "name": "Clinic partner pipeline (25 qualified leads)",
+          "owner": "Vikram Shah",
+          "start": "2026-10-26",
+          "end": "2027-01-29",
+          "progress": 10,
+          "status": "At risk",
+          "isMilestone": false,
+          "dependsOn": [],
+          "description": "**What:** Build a pipeline of independent clinics that use Prime Care for teleconsults and follow-ups.\n\n**Why:** Clinics bring existing patient panels and lower acquisition cost.\n\n**Blockers:**\n- Only 1 of the 2 planned account executives hired (see Hiring)\n\n**Next steps:**\n- Partner with a clinic-management software vendor for warm intros"
+        },
+        {
+          "id": "s4",
+          "name": "First 10 partner contracts signed",
+          "owner": "Vikram Shah",
+          "start": "2027-03-31",
+          "end": "2027-03-31",
+          "progress": 0,
+          "status": "Not started",
+          "isMilestone": true,
+          "dependsOn": [
+            "s2",
+            "s3"
+          ],
+          "description": "**Milestone:** 10 signed employer or clinic contracts, at least 3 converted from pilots."
+        }
+      ]
+    },
+    {
+      "id": "social",
+      "name": "Social Media",
+      "color": "#e87ba4",
+      "owner": "Isha Bose",
+      "goal": "Build a trusted health-education presence — 50k engaged followers across Instagram, LinkedIn and YouTube.",
+      "tasks": [
+        {
+          "id": "m1",
+          "name": "Brand voice & content pillars",
+          "owner": "Isha Bose",
+          "start": "2026-09-21",
+          "end": "2026-10-16",
+          "progress": 95,
+          "status": "In progress",
+          "isMilestone": false,
+          "dependsOn": [],
+          "description": "**What:** Tone of voice, visual templates and four content pillars: everyday health, chronic care, doctor Q&A, patient stories.\n\n**Next steps:**\n- Final approval from marketing head on 16 Oct"
+        },
+        {
+          "id": "m2",
+          "name": "Doctor-led video series (12 episodes)",
+          "owner": "Kabir Sethi",
+          "start": "2026-10-19",
+          "end": "2027-01-22",
+          "progress": 0,
+          "status": "Not started",
+          "isMilestone": false,
+          "dependsOn": [
+            "m1"
+          ],
+          "description": "**What:** Short videos where Prime Care doctors answer the most-searched health questions.\n\n**Why:** Doctor-fronted content builds trust and drives search traffic.\n\n**Blockers:**\n- Every script needs medical-review sign-off; reviewer capacity is limited\n\n**Next steps:**\n- Book studio days and confirm 4 doctors"
+        },
+        {
+          "id": "m3",
+          "name": "v2 launch social campaign",
+          "owner": "Isha Bose",
+          "start": "2026-12-14",
+          "end": "2027-02-05",
+          "progress": 0,
+          "status": "Not started",
+          "isMilestone": false,
+          "dependsOn": [],
+          "description": "**What:** Teaser, launch and sustain phases around the v2 launch, coordinated with the media plan."
+        },
+        {
+          "id": "m4",
+          "name": "Community management playbook",
+          "owner": "Kabir Sethi",
+          "start": "2026-11-02",
+          "end": "2026-11-20",
+          "progress": 0,
+          "status": "Not started",
+          "isMilestone": false,
+          "dependsOn": [],
+          "description": "**What:** Response times, escalation rules and a medical-safety protocol for comments and DMs (never give individual medical advice publicly)."
+        }
+      ]
+    },
+    {
+      "id": "media",
+      "name": "Media Planner",
+      "color": "#008300",
+      "owner": "Rahul Verma",
+      "goal": "Plan and buy paid media that drives qualified sign-ups at a blended acquisition cost within the approved budget.",
+      "tasks": [
+        {
+          "id": "mp1",
+          "name": "Annual media plan & budget sign-off",
+          "owner": "Rahul Verma",
+          "start": "2026-09-28",
+          "end": "2026-10-23",
+          "progress": 70,
+          "status": "In progress",
+          "isMilestone": false,
+          "dependsOn": [],
+          "description": "**What:** Channel mix, monthly budget phasing and KPIs (cost per sign-up, cost per first consult) for the next 12 months.\n\n**Blockers:**\n- Finance wants Q1 budget tied to v2 launch date confirmation\n\n**Next steps:**\n- Present plan at leadership review on 22 Oct"
+        },
+        {
+          "id": "mp2",
+          "name": "Media agency selection",
+          "owner": "Rahul Verma",
+          "start": "2026-10-12",
+          "end": "2026-11-13",
+          "progress": 25,
+          "status": "In progress",
+          "isMilestone": false,
+          "dependsOn": [],
+          "description": "**What:** Pitch process with 3 shortlisted agencies with healthcare advertising experience.\n\n**Next steps:**\n- Agency pitches 3–5 Nov; decision by 13 Nov"
+        },
+        {
+          "id": "mp3",
+          "name": "Performance campaign — wave 1",
+          "owner": "Pooja Nair",
+          "start": "2026-11-23",
+          "end": "2027-01-08",
+          "progress": 0,
+          "status": "Not started",
+          "isMilestone": false,
+          "dependsOn": [
+            "mp1",
+            "mp2"
+          ],
+          "description": "**What:** Search, social and app-install campaigns to test creatives and audiences before launch.\n\n**Why:** Find the winning creative and channel mix so launch spend is efficient."
+        },
+        {
+          "id": "mp4",
+          "name": "Launch flight (OTT + digital)",
+          "owner": "Pooja Nair",
+          "start": "2027-01-11",
+          "end": "2027-03-12",
+          "progress": 0,
+          "status": "Not started",
+          "isMilestone": false,
+          "dependsOn": [
+            "mp3"
+          ],
+          "description": "**What:** The main v2 launch burst across streaming video and digital channels, measured with geo-holdout tests."
+        }
+      ]
+    },
+    {
+      "id": "hiring",
+      "name": "Hiring",
+      "color": "#4a3aa7",
+      "owner": "Farah Khan",
+      "goal": "Hire the 12 people needed to deliver the v2 roadmap without slowing delivery.",
+      "tasks": [
+        {
+          "id": "h1",
+          "name": "Senior backend engineers (×3)",
+          "owner": "Farah Khan",
+          "start": "2026-09-01",
+          "end": "2026-11-20",
+          "progress": 55,
+          "status": "In progress",
+          "isMilestone": false,
+          "dependsOn": [],
+          "description": "**What:** Three senior engineers with healthcare data / integrations experience.\n\n**Status:**\n- 1 offer accepted (joins 2 Nov), 2 candidates in final round\n\n**Next steps:**\n- Close remaining two by mid-November"
+        },
+        {
+          "id": "h2",
+          "name": "Clinical operations lead",
+          "owner": "Farah Khan",
+          "start": "2026-09-15",
+          "end": "2026-10-30",
+          "progress": 80,
+          "status": "At risk",
+          "isMilestone": false,
+          "dependsOn": [],
+          "description": "**What:** Senior clinician to own doctor network quality, protocols and medical review.\n\n**Blockers:**\n- Preferred candidate has a 90-day notice period\n\n**Next steps:**\n- Negotiate notice buy-out or interim consulting arrangement"
+        },
+        {
+          "id": "h3",
+          "name": "Product designer",
+          "owner": "Aditi Rao",
+          "start": "2026-10-19",
+          "end": "2026-12-11",
+          "progress": 0,
+          "status": "Not started",
+          "isMilestone": false,
+          "dependsOn": [],
+          "description": "**What:** Senior product designer for the care-plan and chronic-care experience."
+        },
+        {
+          "id": "h4",
+          "name": "Sales account executives (×4)",
+          "owner": "Aditi Rao",
+          "start": "2026-11-02",
+          "end": "2027-01-29",
+          "progress": 0,
+          "status": "Not started",
+          "isMilestone": false,
+          "dependsOn": [],
+          "description": "**What:** Four AEs for employer and clinic sales.\n\n**Why:** Clinic pipeline target is at risk without more sales capacity."
+        },
+        {
+          "id": "h5",
+          "name": "Team fully staffed",
+          "owner": "Farah Khan",
+          "start": "2027-02-15",
+          "end": "2027-02-15",
+          "progress": 0,
+          "status": "Not started",
+          "isMilestone": true,
+          "dependsOn": [
+            "h1",
+            "h3",
+            "h4"
+          ],
+          "description": "**Milestone:** All 12 planned roles filled and onboarded."
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,1149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prime Care — Product Progress Dashboard</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f5f6f4;
+  --surface: #ffffff;
+  --surface-2: #f8f9f7;
+  --ink: #14171a;
+  --ink-2: #4b5157;
+  --muted: #676d73;
+  --grid: #e7e8e4;
+  --grid-strong: #d3d5cf;
+  --border: rgba(15, 20, 25, .10);
+  --accent: #1c5cab;
+  --accent-soft: #e6effb;
+  --info: #2a78d6;  --info-ink: #1c5cab;
+  --good: #0ca30c;  --good-ink: #006300;
+  --warning: #fab219; --warning-ink: #855600;
+  --critical: #d03b3b; --critical-ink: #ad2727;
+  --today: #d03b3b;
+  --shadow: 0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05);
+  --label-w: 270px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --page: #0e1011; --surface: #17191a; --surface-2: #1d2021;
+    --ink: #f2f3f1; --ink-2: #c3c6c2; --muted: #9ba1a4;
+    --grid: #26292a; --grid-strong: #34383a; --border: rgba(255,255,255,.10);
+    --accent: #7fb2f0; --accent-soft: #1b2a3d;
+    --info: #3987e5; --info-ink: #8dbcf3;
+    --good-ink: #4cc94c; --warning-ink: #fab219; --critical-ink: #ff8a8a;
+    --today: #e66767;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 20px rgba(0,0,0,.25);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0e1011; --surface: #17191a; --surface-2: #1d2021;
+  --ink: #f2f3f1; --ink-2: #c3c6c2; --muted: #9ba1a4;
+  --grid: #26292a; --grid-strong: #34383a; --border: rgba(255,255,255,.10);
+  --accent: #7fb2f0; --accent-soft: #1b2a3d;
+  --info: #3987e5; --info-ink: #8dbcf3;
+  --good-ink: #4cc94c; --warning-ink: #fab219; --critical-ink: #ff8a8a;
+  --today: #e66767;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 20px rgba(0,0,0,.25);
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0; background: var(--page); color: var(--ink);
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.wrap { max-width: 1440px; margin: 0 auto; padding: 28px 28px 80px; }
+
+/* ---------- buttons ---------- */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px;
+  border-radius: 8px; border: 1px solid var(--border); background: var(--surface);
+  cursor: pointer; font-size: 13px; font-weight: 550; white-space: nowrap;
+}
+.btn:hover { background: var(--surface-2); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.danger { color: var(--critical-ink); }
+.btn.ghost { background: transparent; border-color: transparent; }
+.btn.ghost:hover { background: var(--surface-2); }
+.btn.sm { height: 28px; padding: 0 9px; font-size: 12px; }
+
+/* ---------- header ---------- */
+.top { display: flex; flex-wrap: wrap; gap: 16px 24px; align-items: center; justify-content: space-between; }
+.brand { display: flex; gap: 14px; align-items: center; }
+.logo { width: 44px; height: 44px; border-radius: 12px; background: var(--accent); display: grid; place-items: center; flex: none; }
+.brand h1 { margin: 0; font-size: 24px; line-height: 1.2; letter-spacing: -.015em; }
+.brand .sub { color: var(--ink-2); font-size: 13.5px; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 22px 0 22px; }
+.stat { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+.stat .k { font-size: 12.5px; color: var(--ink-2); display: flex; align-items: center; gap: 6px; }
+.stat .v { font-size: 28px; font-weight: 650; letter-spacing: -.02em; line-height: 1.25; margin-top: 2px; }
+.stat .v small { display: block; font-size: 12px; font-weight: 500; color: var(--muted); letter-spacing: 0; line-height: 1.3; }
+.stat .meter { height: 6px; border-radius: 3px; background: var(--grid); margin-top: 8px; overflow: hidden; }
+.stat .meter span { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+
+/* ---------- panels ---------- */
+.panel { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow); }
+.panel-head { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+.panel-head h2 { margin: 0; font-size: 16px; display: flex; align-items: center; gap: 8px; }
+.live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--good); box-shadow: 0 0 0 3px color-mix(in srgb, var(--good) 25%, transparent); }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; background: var(--surface); padding: 0 12px; height: 32px; cursor: pointer; font-size: 13px; font-weight: 550; color: var(--ink-2); }
+.seg button + button { border-left: 1px solid var(--border); }
+.seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.select { height: 32px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); padding: 0 8px; font-size: 13px; max-width: 190px; }
+.filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 18px; border-bottom: 1px solid var(--border); background: var(--surface-2); font-size: 13px; color: var(--ink-2); }
+.filters label { display: inline-flex; align-items: center; gap: 6px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 10px 18px; border-top: 1px solid var(--border); font-size: 12.5px; color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 10px; height: 10px; border-radius: 3px; background: var(--c); display: inline-block; }
+.legend .dia { width: 9px; height: 9px; transform: rotate(45deg); border-radius: 1px; background: var(--muted); }
+
+/* ---------- gantt ---------- */
+.gantt-scroll { overflow: auto; max-height: 72vh; position: relative; overscroll-behavior-x: contain; }
+.gantt { position: relative; }
+.g-head { display: flex; position: sticky; top: 0; z-index: 6; background: var(--surface); box-shadow: inset 0 -1px 0 var(--grid-strong); }
+.g-corner { position: sticky; left: 0; z-index: 7; width: var(--label-w); flex: none; background: var(--surface); box-shadow: inset -1px -1px 0 var(--grid-strong); padding: 0 14px 8px; font-size: 12px; font-weight: 600; color: var(--muted); display: flex; align-items: flex-end; text-transform: uppercase; letter-spacing: .04em; }
+.g-tiers { position: relative; flex: none; height: 54px; }
+.tc { position: absolute; display: flex; align-items: center; padding: 0 6px; font-size: 12px; color: var(--ink-2); white-space: nowrap; overflow: hidden; border-left: 1px solid var(--grid); }
+.tc.top { top: 0; height: 28px; font-weight: 600; color: var(--ink); border-left-color: var(--grid-strong); }
+.tc.bot { top: 28px; height: 26px; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.tc.bot.center { justify-content: center; padding: 0; }
+.today-pill { position: absolute; top: 30px; transform: translateX(-50%); background: var(--today); color: #fff; font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 999px; z-index: 2; letter-spacing: .02em; }
+
+.g-body { position: relative; }
+.g-overlay { position: absolute; top: 0; bottom: 0; left: var(--label-w); pointer-events: none; z-index: 1; }
+.gl { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--grid); }
+.gl.strong { background: var(--grid-strong); }
+.weekend { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--ink) 3%, transparent); }
+.today-line { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--today); }
+.deps { position: absolute; top: 0; left: 0; overflow: visible; }
+
+.g-row { display: flex; height: 44px; position: relative; box-shadow: inset 0 -1px 0 var(--grid); }
+.g-row.group { height: 40px; background: color-mix(in srgb, var(--surface-2) 70%, transparent); }
+.g-label { position: sticky; left: 0; z-index: 4; width: var(--label-w); flex: none; background: var(--surface); box-shadow: inset -1px -1px 0 var(--grid-strong); display: flex; align-items: center; min-width: 0; }
+.g-row.group .g-label { background: var(--surface-2); }
+.g-label > button { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 8px; width: 100%; height: 100%; padding: 0 12px 0 14px; cursor: pointer; min-width: 0; }
+.g-label > button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.g-label > button:hover { background: color-mix(in srgb, var(--ink) 4%, transparent); }
+.g-label > .g-task-btn { padding-left: 34px; flex-direction: column; align-items: flex-start; justify-content: center; gap: 1px; }
+.g-task-btn .nm { font-size: 13px; font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.g-task-btn .sub { display: flex; gap: 6px; align-items: center; font-size: 11.5px; color: var(--muted); max-width: 100%; white-space: nowrap; overflow: hidden; }
+.g-group-btn .nm { font-weight: 650; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.g-group-btn .ct { margin-left: auto; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; flex: none; }
+.chev { width: 16px; height: 16px; flex: none; transition: transform .15s; color: var(--muted); }
+[aria-expanded="false"] > .chev { transform: rotate(-90deg); }
+.swatch { width: 10px; height: 10px; border-radius: 3px; background: var(--c); flex: none; }
+
+.g-track { position: relative; flex: none; z-index: 2; }
+.bar {
+  position: absolute; top: 12px; height: 20px; border-radius: 5px; padding: 0; border: 0; cursor: pointer;
+  background: color-mix(in srgb, var(--c) 26%, var(--surface)); overflow: hidden; min-width: 4px;
+}
+.bar .fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--c); }
+.bar:hover { filter: brightness(1.06); box-shadow: 0 0 0 2px color-mix(in srgb, var(--c) 35%, transparent); }
+.bar.risk { outline: 2px dashed var(--warning); outline-offset: 1px; }
+.bar.delay { outline: 2px solid var(--critical); outline-offset: 1px; }
+.bar:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.sumbar { position: absolute; top: 17px; height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--c) 26%, var(--surface)); overflow: hidden; }
+.sumbar span { position: absolute; left: 0; top: 0; bottom: 0; background: var(--c); }
+.ms {
+  position: absolute; top: 13px; width: 18px; height: 18px; margin-left: -9px; padding: 0; cursor: pointer;
+  transform: rotate(45deg); border-radius: 3px; background: var(--c); border: 2px solid var(--surface);
+  box-shadow: 0 0 0 1px var(--c);
+}
+.ms.done { background: var(--surface); box-shadow: 0 0 0 2px var(--c); }
+.ms.delay { box-shadow: 0 0 0 2px var(--critical); }
+.ms:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+.meta { position: absolute; top: 0; height: 44px; display: flex; align-items: center; gap: 5px; padding-left: 8px; white-space: nowrap; font-size: 12px; color: var(--ink-2); pointer-events: none; font-variant-numeric: tabular-nums; }
+.meta b { color: var(--ink); font-weight: 650; }
+.meta .flag-risk { color: var(--warning-ink); font-weight: 650; }
+.meta .flag-delay { color: var(--critical-ink); font-weight: 650; }
+.empty { padding: 40px 18px; text-align: center; color: var(--muted); }
+
+/* ---------- badges ---------- */
+.badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 600; line-height: 18px; padding: 0 8px; border-radius: 999px; border: 1px solid; white-space: nowrap; }
+.badge .ic { font-size: 11px; }
+.b-ns { color: var(--ink-2); border-color: var(--grid-strong); }
+.b-ip { color: var(--info-ink); border-color: color-mix(in srgb, var(--info) 45%, transparent); background: color-mix(in srgb, var(--info) 10%, transparent); }
+.b-done { color: var(--good-ink); border-color: color-mix(in srgb, var(--good) 45%, transparent); background: color-mix(in srgb, var(--good) 10%, transparent); }
+.b-risk { color: var(--warning-ink); border-color: color-mix(in srgb, var(--warning) 60%, transparent); background: color-mix(in srgb, var(--warning) 14%, transparent); }
+.b-delay { color: var(--critical-ink); border-color: color-mix(in srgb, var(--critical) 50%, transparent); background: color-mix(in srgb, var(--critical) 10%, transparent); }
+.g-task-btn .badge { line-height: 15px; font-size: 10.5px; padding: 0 6px; }
+
+/* ---------- tooltip ---------- */
+.tip {
+  position: fixed; z-index: 60; width: 320px; max-width: calc(100vw - 24px); background: var(--surface); color: var(--ink);
+  border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.18);
+  padding: 12px 14px; font-size: 12.5px; pointer-events: none; opacity: 0; transition: opacity .12s; visibility: hidden;
+}
+.tip.show { opacity: 1; visibility: visible; }
+.tip h4 { margin: 0 0 2px; font-size: 14px; }
+.tip .ws { display: flex; align-items: center; gap: 6px; color: var(--ink-2); margin-bottom: 8px; }
+.tip dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 0; }
+.tip dt { color: var(--muted); }
+.tip dd { margin: 0; font-variant-numeric: tabular-nums; }
+.tip .excerpt { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); color: var(--ink-2); }
+.tip .hint { margin-top: 8px; color: var(--muted); font-size: 11.5px; }
+
+/* ---------- details ---------- */
+.section-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin: 36px 0 14px; }
+.section-head h2 { margin: 0; font-size: 19px; letter-spacing: -.01em; }
+.section-head p { margin: 2px 0 0; color: var(--ink-2); font-size: 13px; }
+.cards { display: grid; gap: 14px; }
+.ws-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow); overflow: hidden; border-top: 4px solid var(--c); }
+.ws-head { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 300px) auto; gap: 14px 20px; align-items: center; padding: 16px 18px; }
+.ws-toggle { all: unset; box-sizing: border-box; display: flex; gap: 10px; align-items: flex-start; cursor: pointer; min-width: 0; border-radius: 8px; }
+.ws-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.ws-toggle .chev { margin-top: 3px; }
+.ws-toggle h3 { margin: 0; font-size: 16px; display: flex; align-items: center; gap: 8px; }
+.ws-toggle .goal { margin: 3px 0 0; color: var(--ink-2); font-size: 13px; }
+.ws-stats { font-size: 12.5px; color: var(--ink-2); }
+.ws-stats .row { display: flex; justify-content: space-between; gap: 8px; }
+.ws-stats b { color: var(--ink); }
+.pbar { height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--c) 18%, var(--grid)); overflow: hidden; margin: 6px 0; }
+.pbar span { display: block; height: 100%; background: var(--c); border-radius: 4px; }
+.ws-actions { display: flex; gap: 6px; }
+.ws-body { border-top: 1px solid var(--border); }
+.task { padding: 16px 18px 16px 46px; border-top: 1px solid var(--grid); position: relative; transition: background-color .4s; scroll-margin-top: 90px; }
+.task:first-child { border-top: 0; }
+.task:focus { outline: none; }
+.task.flash { animation: flash 2.2s ease-out; }
+@keyframes flash { 0%, 35% { background: color-mix(in srgb, var(--c) 16%, transparent); box-shadow: inset 4px 0 0 var(--c); } 100% { background: transparent; box-shadow: inset 4px 0 0 transparent; } }
+.task-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.task-top h4 { margin: 0; font-size: 14.5px; }
+.task-top .pct { margin-left: auto; font-weight: 650; font-variant-numeric: tabular-nums; }
+.task-meta { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 4px; font-size: 12.5px; color: var(--ink-2); }
+.task-meta span { display: inline-flex; gap: 4px; align-items: center; }
+.task-meta .lbl { color: var(--muted); }
+.mini { height: 5px; border-radius: 3px; background: color-mix(in srgb, var(--c) 18%, var(--grid)); overflow: hidden; margin: 10px 0 2px; max-width: 420px; }
+.mini span { display: block; height: 100%; background: var(--c); }
+.desc { margin-top: 10px; color: var(--ink); font-size: 13.5px; max-width: 880px; }
+.desc p { margin: 0 0 8px; }
+.desc ul { margin: 0 0 8px; padding-left: 20px; }
+.desc li { margin: 2px 0; }
+.desc strong { font-weight: 650; }
+.task-actions { margin-top: 6px; display: flex; gap: 6px; }
+.auto-note { font-size: 11.5px; color: var(--critical-ink); }
+.ms-mark { color: var(--c); }
+
+/* ---------- dialog ---------- */
+dialog { border: 0; padding: 0; border-radius: 16px; width: min(660px, calc(100vw - 24px)); max-height: calc(100vh - 32px); background: var(--surface); color: var(--ink); box-shadow: 0 24px 60px rgba(0,0,0,.3); }
+dialog::backdrop { background: rgba(10, 14, 18, .5); }
+dialog form { display: flex; flex-direction: column; max-height: calc(100vh - 32px); }
+.dlg-head { padding: 18px 20px 6px; display: flex; justify-content: space-between; align-items: center; }
+.dlg-head h3 { margin: 0; font-size: 17px; }
+.dlg-body { padding: 10px 20px 8px; overflow: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 12px 14px; }
+.dlg-body .full { grid-column: 1 / -1; }
+.field { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+.field input:not([type=checkbox]):not([type=range]):not([type=color]), .field select, .field textarea {
+  border: 1px solid var(--grid-strong); border-radius: 8px; padding: 7px 10px; background: var(--surface); font-weight: 400; font-size: 14px; color: var(--ink); min-height: 36px;
+}
+.field textarea { min-height: 170px; resize: vertical; line-height: 1.5; font-family: inherit; }
+.field .help { font-weight: 400; color: var(--muted); font-size: 12px; }
+.range-row { display: flex; gap: 10px; align-items: center; }
+.range-row input[type=range] { flex: 1; accent-color: var(--accent); }
+.range-row input[type=number] { width: 76px; }
+.check { flex-direction: row; align-items: center; gap: 8px; font-weight: 550; color: var(--ink); }
+.check input { width: 16px; height: 16px; accent-color: var(--accent); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.chips button { width: 26px; height: 26px; border-radius: 7px; border: 2px solid var(--surface); box-shadow: 0 0 0 1px var(--border); cursor: pointer; background: var(--c); }
+.chips button[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--ink); }
+.chips input[type=color] { width: 34px; height: 28px; border: 1px solid var(--border); border-radius: 7px; padding: 1px; background: var(--surface); }
+.dlg-foot { display: flex; gap: 8px; justify-content: flex-end; padding: 12px 20px 18px; border-top: 1px solid var(--border); margin-top: 8px; }
+.dlg-foot .spacer { flex: 1; }
+.err { color: var(--critical-ink); font-size: 12.5px; min-height: 1em; }
+
+.toast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%) translateY(20px); background: var(--ink); color: var(--surface); padding: 10px 16px; border-radius: 10px; font-size: 13px; opacity: 0; transition: .2s; z-index: 80; pointer-events: none; }
+.toast.show { opacity: 1; transform: translateX(-50%); }
+footer { margin-top: 40px; color: var(--muted); font-size: 12px; text-align: center; }
+
+@media (max-width: 900px) {
+  .ws-head { grid-template-columns: 1fr; }
+  .ws-actions { justify-content: flex-start; }
+}
+@media (max-width: 640px) {
+  :root { --label-w: 160px; }
+  .wrap { padding: 16px 16px 60px; }
+  .brand h1 { font-size: 20px; }
+  .stats { grid-template-columns: repeat(2, 1fr); }
+  .stat .v { font-size: 22px; }
+  .g-label > .g-task-btn { padding-left: 22px; }
+  .g-task-btn .sub .owner { display: none; }
+  .task { padding: 14px 16px; }
+  .dlg-body { grid-template-columns: 1fr; }
+  .gantt-scroll { max-height: 65vh; }
+  .select { max-width: 150px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * { transition: none !important; animation-duration: .01ms !important; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ================= HEADER ================= -->
+  <header class="top">
+    <div class="brand">
+      <div class="logo" aria-hidden="true">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6z" fill="#fff"/></svg>
+      </div>
+      <div>
+        <h1>Prime Care</h1>
+        <div class="sub">Product Progress Dashboard · <time id="todayLabel"></time></div>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn primary" id="btnAddTask" type="button">+ Add task</button>
+      <button class="btn" id="btnExport" type="button">Export JSON</button>
+      <button class="btn" id="btnImport" type="button">Import JSON</button>
+      <input type="file" id="fileImport" accept="application/json,.json" hidden>
+      <button class="btn" id="btnTheme" type="button" aria-label="Change colour theme">Theme: System</button>
+    </div>
+  </header>
+
+  <section class="stats" id="stats" aria-label="Overall progress summary"></section>
+
+  <!-- ================= GANTT ================= -->
+  <section class="panel" aria-labelledby="ganttTitle">
+    <div class="panel-head">
+      <h2 id="ganttTitle"><span class="live-dot" aria-hidden="true"></span>Live roadmap</h2>
+      <div class="controls">
+        <div class="seg" role="group" aria-label="Zoom level" id="zoomSeg">
+          <button type="button" data-zoom="week">Week</button>
+          <button type="button" data-zoom="month">Month</button>
+          <button type="button" data-zoom="quarter">Quarter</button>
+        </div>
+        <button class="btn" type="button" id="btnToday">Jump to today</button>
+        <button class="btn" type="button" id="btnCollapseGantt">Collapse all</button>
+      </div>
+    </div>
+    <div class="filters" role="group" aria-label="Filters">
+      <label>Workstream <select class="select" id="fWs"></select></label>
+      <label>Owner <select class="select" id="fOwner"></select></label>
+      <label>Status <select class="select" id="fStatus"></select></label>
+      <button class="btn ghost sm" type="button" id="btnClearFilters">Clear filters</button>
+      <span id="filterCount" style="margin-left:auto"></span>
+    </div>
+    <div class="gantt-scroll" id="ganttScroll" tabindex="0" aria-label="Gantt chart, scroll horizontally to see the timeline">
+      <div class="gantt" id="gantt"></div>
+    </div>
+    <div class="legend" id="legend"></div>
+  </section>
+
+  <!-- ================= DETAILS ================= -->
+  <div class="section-head">
+    <div>
+      <h2>Workstream details</h2>
+      <p>What each team is doing, why, what's blocking it and what happens next.</p>
+    </div>
+    <div class="controls">
+      <button class="btn" type="button" id="btnAddWs">+ Add workstream</button>
+      <button class="btn" type="button" id="btnExpandAll">Collapse all</button>
+    </div>
+  </div>
+  <div class="cards" id="cards"></div>
+
+  <footer>
+    Changes save automatically in this browser. Use Export JSON to back up or share.
+    · <button class="btn ghost sm" type="button" id="btnReset">Reset to sample data</button>
+  </footer>
+</div>
+
+<div class="tip" id="tip" role="tooltip"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<!-- ================= TASK DIALOG ================= -->
+<dialog id="taskDlg" aria-labelledby="taskDlgTitle">
+  <form id="taskForm" novalidate>
+    <div class="dlg-head"><h3 id="taskDlgTitle">Edit task</h3><button class="btn ghost sm" type="button" data-close aria-label="Close">✕</button></div>
+    <div class="dlg-body">
+      <input type="hidden" id="tId">
+      <label class="field full">Task name<input id="tName" required maxlength="140"></label>
+      <label class="field">Workstream<select id="tWs"></select></label>
+      <label class="field">Owner<input id="tOwner" list="ownerList" maxlength="80"></label>
+      <label class="field">Start date<input type="date" id="tStart" required></label>
+      <label class="field">End date<input type="date" id="tEnd" required></label>
+      <label class="field">Status<select id="tStatus"></select></label>
+      <div class="field">Progress
+        <div class="range-row">
+          <input type="range" id="tProgress" min="0" max="100" step="5" aria-label="Progress percent">
+          <input type="number" id="tProgressNum" min="0" max="100" aria-label="Progress percent value">
+        </div>
+      </div>
+      <label class="field check full"><input type="checkbox" id="tMilestone"> Milestone (shown as a diamond on the end date)</label>
+      <label class="field full">Depends on <span class="help">Ctrl/⌘-click to select several. Draws an arrow from each prerequisite.</span>
+        <select id="tDeps" multiple size="6"></select>
+      </label>
+      <label class="field full">Description
+        <span class="help">Blank line = new paragraph · start a line with "- " for a bullet · **bold**</span>
+        <textarea id="tDesc" placeholder="**What:** …&#10;&#10;**Why:** …&#10;&#10;**Blockers:**&#10;- …&#10;&#10;**Next steps:**&#10;- …"></textarea>
+      </label>
+      <div class="err full" id="tErr" aria-live="polite"></div>
+    </div>
+    <div class="dlg-foot">
+      <button class="btn danger" type="button" id="tDelete">Delete task</button>
+      <span class="spacer"></span>
+      <button class="btn" type="button" data-close>Cancel</button>
+      <button class="btn primary" type="submit">Save</button>
+    </div>
+  </form>
+</dialog>
+<datalist id="ownerList"></datalist>
+
+<!-- ================= WORKSTREAM DIALOG ================= -->
+<dialog id="wsDlg" aria-labelledby="wsDlgTitle">
+  <form id="wsForm" novalidate>
+    <div class="dlg-head"><h3 id="wsDlgTitle">Edit workstream</h3><button class="btn ghost sm" type="button" data-close aria-label="Close">✕</button></div>
+    <div class="dlg-body">
+      <input type="hidden" id="wId">
+      <label class="field">Name<input id="wName" required maxlength="60"></label>
+      <label class="field">Workstream owner<input id="wOwner" list="ownerList" maxlength="80"></label>
+      <div class="field full">Colour<div class="chips" id="wChips"></div></div>
+      <label class="field full">Goal / objective<textarea id="wGoal" style="min-height:80px" maxlength="400"></textarea></label>
+      <div class="err full" id="wErr" aria-live="polite"></div>
+    </div>
+    <div class="dlg-foot">
+      <button class="btn danger" type="button" id="wDelete">Delete workstream</button>
+      <span class="spacer"></span>
+      <button class="btn" type="button" data-close>Cancel</button>
+      <button class="btn primary" type="submit">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+/* =====================================================================
+   PRIME CARE — DASHBOARD DATA
+   ---------------------------------------------------------------------
+   Edit this object by hand to change the default data. Once you edit
+   anything in the dashboard, your copy is saved in this browser
+   (localStorage) and takes priority — use "Reset to sample data" in the
+   footer to reload what's written here.
+
+   Task fields:
+     id           unique string (referenced by dependsOn)
+     name, owner  text
+     start, end   "YYYY-MM-DD"
+     progress     0–100
+     status       "Not started" | "In progress" | "Done" | "At risk" | "Delayed"
+                  (tasks past their end date that aren't Done show as Delayed automatically)
+     isMilestone  true → drawn as a diamond on the end date
+     dependsOn    array of task ids this task waits on
+     description  text: blank line = new paragraph, "- " = bullet, **bold**
+   ===================================================================== */
+const SAMPLE_DATA = {
+  workstreams: [
+    {
+      id: "product", name: "Product", color: "#2a78d6", owner: "Ananya Rao",
+      goal: "Ship Prime Care v2 — one patient app for appointments, care plans and records — and lift weekly active patients by 30%.",
+      tasks: [
+        { id: "p1", name: "Patient onboarding redesign", owner: "Ananya Rao", start: "2026-09-01", end: "2026-10-30", progress: 75, status: "In progress", isMilestone: false, dependsOn: [],
+          description: "**What:** Rebuilding sign-up and first-visit flows: phone-number login, insurance card scan, and a 3-question health profile instead of the current 14-field form.\n\n**Why:** 41% of new users drop off before booking their first consult. Usability sessions show the long form and unclear consent screens are the main causes.\n\n**Blockers:**\n- Legal sign-off on the new consent copy (expected this week)\n\n**Next steps:**\n- Finish build of insurance scan (OCR vendor integrated)\n- A/B test new flow with 20% of traffic from 26 Oct\n- Target: first-booking conversion from 59% to 70%" },
+        { id: "p2", name: "Care-plan tracker (MVP)", owner: "Rohan Mehta", start: "2026-10-12", end: "2026-12-18", progress: 20, status: "In progress", isMilestone: false, dependsOn: ["p1"],
+          description: "**What:** A daily view of each patient's care plan — medications, vitals to log, follow-up appointments — with reminders.\n\n**Why:** Chronic-care patients (diabetes, hypertension) are our highest-value cohort; doctors asked for a way to see adherence between visits.\n\n**Blockers:**\n- Needs the FHIR gateway (Tech Integrations) to read prescriptions\n\n**Next steps:**\n- Finalise designs with 5 partner doctors\n- Build medication reminder service\n- Beta with 200 patients in December" },
+        { id: "p3", name: "Accessibility audit (WCAG 2.2 AA)", owner: "Meera Iyer", start: "2026-11-02", end: "2026-11-27", progress: 0, status: "Not started", isMilestone: false, dependsOn: [],
+          description: "**What:** External audit of the patient app and web portal against WCAG 2.2 AA, followed by fixes.\n\n**Why:** Many of our patients are older adults; enterprise customers also require an accessibility statement in contracts.\n\n**Next steps:**\n- Confirm audit vendor and scope\n- Reserve 1 sprint of engineering capacity for fixes" },
+        { id: "p4", name: "Prime Care v2 public launch", owner: "Ananya Rao", start: "2027-01-15", end: "2027-01-15", progress: 0, status: "Not started", isMilestone: true, dependsOn: ["p2", "p3", "i3"],
+          description: "**Milestone:** v2 available to all patients on iOS, Android and web.\n\n**Launch criteria:**\n- Care-plan tracker out of beta with crash-free rate above 99.5%\n- e-Prescription flow live with at least 2 pharmacy partners\n- Accessibility fixes from the audit shipped" },
+        { id: "p5", name: "Post-launch usability study", owner: "Meera Iyer", start: "2027-01-25", end: "2027-03-05", progress: 0, status: "Not started", isMilestone: false, dependsOn: ["p4"],
+          description: "**What:** 20 moderated sessions plus in-app survey after launch.\n\n**Why:** Validate that v2 actually reduces the effort to book and follow care plans, and prioritise the Q2 roadmap." }
+      ]
+    },
+    {
+      id: "tech", name: "Tech Integrations", color: "#eb6834", owner: "Karthik Nair",
+      goal: "Connect Prime Care to labs, pharmacies and hospital records through secure, standards-based (FHIR) interfaces.",
+      tasks: [
+        { id: "i1", name: "FHIR R4 integration gateway", owner: "Karthik Nair", start: "2026-08-17", end: "2026-10-09", progress: 90, status: "In progress", isMilestone: false, dependsOn: [],
+          description: "**What:** A central gateway that translates partner data (HL7v2, CSV, proprietary APIs) into FHIR R4 resources, with audit logging and consent checks.\n\n**Why:** Every downstream integration (labs, pharmacies, hospitals) plugs into this, so we build security and compliance once.\n\n**Blockers:**\n- Two high-severity findings from the penetration test are still open\n\n**Next steps:**\n- Fix token-expiry and logging findings; re-test on 20 Oct\n- Production sign-off by CISO" },
+        { id: "i2", name: "Lab results integration", owner: "Divya Menon", start: "2026-10-05", end: "2026-12-11", progress: 30, status: "At risk", isMilestone: false, dependsOn: ["i1"],
+          description: "**What:** Receive lab reports from 3 partner lab chains directly into the patient record, with abnormal values flagged for the doctor.\n\n**Why:** Today patients upload PDFs manually; 30% of follow-up consults are delayed waiting for reports.\n\n**Blockers:**\n- Largest partner lab has not shared its API sandbox yet\n- Depends on the FHIR gateway going live\n\n**Next steps:**\n- Escalate sandbox access with the partner's CTO\n- Start with the two labs that are ready" },
+        { id: "i3", name: "e-Prescription & pharmacy API", owner: "Karthik Nair", start: "2026-11-09", end: "2027-01-08", progress: 0, status: "Not started", isMilestone: false, dependsOn: ["i1"],
+          description: "**What:** Doctors issue digital prescriptions that are routed to the patient's chosen pharmacy for delivery or pickup.\n\n**Why:** A launch requirement for v2 and a new revenue line through pharmacy partnerships.\n\n**Next steps:**\n- Shortlist 2 pharmacy partners\n- Confirm regulatory requirements for digital signatures" },
+        { id: "i4", name: "National health ID linking", owner: "Divya Menon", start: "2026-12-01", end: "2027-02-26", progress: 0, status: "Not started", isMilestone: false, dependsOn: [],
+          description: "**What:** Let patients link their national health ID so records from other providers can be pulled in with consent.\n\n**Why:** Gives doctors a fuller history and positions Prime Care for public-health programmes." }
+      ]
+    },
+    {
+      id: "growth", name: "Growth & CRM", color: "#1baf7a", owner: "Sana Qureshi",
+      goal: "Build a lifecycle engine that turns sign-ups into active, retained patients — target 35% 90-day retention.",
+      tasks: [
+        { id: "g1", name: "CRM platform migration", owner: "Sana Qureshi", start: "2026-09-07", end: "2026-10-30", progress: 60, status: "In progress", isMilestone: false, dependsOn: [],
+          description: "**What:** Move patient lifecycle data from spreadsheets and the legacy email tool into a single CRM with event tracking.\n\n**Why:** We can't personalise outreach or measure retention by cohort today.\n\n**Blockers:**\n- Data-processing agreement with the CRM vendor under legal review\n\n**Next steps:**\n- Complete event schema (sign-up, booking, consult, refill)\n- Migrate 180k contacts with consent flags" },
+        { id: "g2", name: "Onboarding journeys (email / SMS / WhatsApp)", owner: "Arjun Das", start: "2026-10-19", end: "2026-12-04", progress: 0, status: "Not started", isMilestone: false, dependsOn: ["g1"],
+          description: "**What:** Automated first-30-day journeys: welcome, book your first consult, complete your health profile, set up reminders.\n\n**Why:** Patients who book within 7 days of sign-up are 3x more likely to still be active at 90 days.\n\n**Next steps:**\n- Draft copy with clinical review\n- Set up control group for measurement" },
+        { id: "g3", name: "Referral programme pilot", owner: "Arjun Das", start: "2026-12-07", end: "2027-02-12", progress: 0, status: "Not started", isMilestone: false, dependsOn: ["g2"],
+          description: "**What:** Give-a-consult, get-a-consult referral rewards for existing patients.\n\n**Why:** Word of mouth is our cheapest channel; pilot to test whether incentives grow it." },
+        { id: "g4", name: "Retention dashboard & cohort reporting", owner: "Sana Qureshi", start: "2026-11-16", end: "2027-01-08", progress: 0, status: "Not started", isMilestone: false, dependsOn: ["g1"],
+          description: "**What:** Weekly cohort retention, activation funnel and channel attribution for leadership.\n\n**Why:** One shared source of truth for growth metrics before the v2 launch." }
+      ]
+    },
+    {
+      id: "sales", name: "Sales", color: "#eda100", owner: "Vikram Shah",
+      goal: "Sign 10 employer and clinic partners for Prime Care's B2B care programme by the end of Q1 2027.",
+      tasks: [
+        { id: "s1", name: "Sales deck & pricing model", owner: "Vikram Shah", start: "2026-09-14", end: "2026-10-09", progress: 100, status: "Done", isMilestone: false, dependsOn: [],
+          description: "**Done:** Per-employee-per-month pricing with three tiers, ROI calculator and case-study deck approved by leadership on 8 Oct." },
+        { id: "s2", name: "Employer pilot — 3 corporate clients", owner: "Neha Kapoor", start: "2026-10-05", end: "2026-12-31", progress: 35, status: "In progress", isMilestone: false, dependsOn: ["s1"],
+          description: "**What:** 90-day pilots offering Prime Care as an employee health benefit at three companies (≈4,500 employees in total).\n\n**Why:** Pilot results are our proof point for larger enterprise deals.\n\n**Status:**\n- 2 of 3 pilots live; third starts 1 Nov\n- Early activation at 22% of eligible employees\n\n**Next steps:**\n- Run on-site health camps to lift activation\n- Mid-pilot review with HR teams in late November" },
+        { id: "s3", name: "Clinic partner pipeline (25 qualified leads)", owner: "Vikram Shah", start: "2026-10-26", end: "2027-01-29", progress: 10, status: "At risk", isMilestone: false, dependsOn: [],
+          description: "**What:** Build a pipeline of independent clinics that use Prime Care for teleconsults and follow-ups.\n\n**Why:** Clinics bring existing patient panels and lower acquisition cost.\n\n**Blockers:**\n- Only 1 of the 2 planned account executives hired (see Hiring)\n\n**Next steps:**\n- Partner with a clinic-management software vendor for warm intros" },
+        { id: "s4", name: "First 10 partner contracts signed", owner: "Vikram Shah", start: "2027-03-31", end: "2027-03-31", progress: 0, status: "Not started", isMilestone: true, dependsOn: ["s2", "s3"],
+          description: "**Milestone:** 10 signed employer or clinic contracts, at least 3 converted from pilots." }
+      ]
+    },
+    {
+      id: "social", name: "Social Media", color: "#e87ba4", owner: "Isha Bose",
+      goal: "Build a trusted health-education presence — 50k engaged followers across Instagram, LinkedIn and YouTube.",
+      tasks: [
+        { id: "m1", name: "Brand voice & content pillars", owner: "Isha Bose", start: "2026-09-21", end: "2026-10-16", progress: 95, status: "In progress", isMilestone: false, dependsOn: [],
+          description: "**What:** Tone of voice, visual templates and four content pillars: everyday health, chronic care, doctor Q&A, patient stories.\n\n**Next steps:**\n- Final approval from marketing head on 16 Oct" },
+        { id: "m2", name: "Doctor-led video series (12 episodes)", owner: "Kabir Sethi", start: "2026-10-19", end: "2027-01-22", progress: 0, status: "Not started", isMilestone: false, dependsOn: ["m1"],
+          description: "**What:** Short videos where Prime Care doctors answer the most-searched health questions.\n\n**Why:** Doctor-fronted content builds trust and drives search traffic.\n\n**Blockers:**\n- Every script needs medical-review sign-off; reviewer capacity is limited\n\n**Next steps:**\n- Book studio days and confirm 4 doctors" },
+        { id: "m3", name: "v2 launch social campaign", owner: "Isha Bose", start: "2026-12-14", end: "2027-02-05", progress: 0, status: "Not started", isMilestone: false, dependsOn: [],
+          description: "**What:** Teaser, launch and sustain phases around the v2 launch, coordinated with the media plan." },
+        { id: "m4", name: "Community management playbook", owner: "Kabir Sethi", start: "2026-11-02", end: "2026-11-20", progress: 0, status: "Not started", isMilestone: false, dependsOn: [],
+          description: "**What:** Response times, escalation rules and a medical-safety protocol for comments and DMs (never give individual medical advice publicly)." }
+      ]
+    },
+    {
+      id: "media", name: "Media Planner", color: "#008300", owner: "Rahul Verma",
+      goal: "Plan and buy paid media that drives qualified sign-ups at a blended acquisition cost within the approved budget.",
+      tasks: [
+        { id: "mp1", name: "Annual media plan & budget sign-off", owner: "Rahul Verma", start: "2026-09-28", end: "2026-10-23", progress: 70, status: "In progress", isMilestone: false, dependsOn: [],
+          description: "**What:** Channel mix, monthly budget phasing and KPIs (cost per sign-up, cost per first consult) for the next 12 months.\n\n**Blockers:**\n- Finance wants Q1 budget tied to v2 launch date confirmation\n\n**Next steps:**\n- Present plan at leadership review on 22 Oct" },
+        { id: "mp2", name: "Media agency selection", owner: "Rahul Verma", start: "2026-10-12", end: "2026-11-13", progress: 25, status: "In progress", isMilestone: false, dependsOn: [],
+          description: "**What:** Pitch process with 3 shortlisted agencies with healthcare advertising experience.\n\n**Next steps:**\n- Agency pitches 3–5 Nov; decision by 13 Nov" },
+        { id: "mp3", name: "Performance campaign — wave 1", owner: "Pooja Nair", start: "2026-11-23", end: "2027-01-08", progress: 0, status: "Not started", isMilestone: false, dependsOn: ["mp1", "mp2"],
+          description: "**What:** Search, social and app-install campaigns to test creatives and audiences before launch.\n\n**Why:** Find the winning creative and channel mix so launch spend is efficient." },
+        { id: "mp4", name: "Launch flight (OTT + digital)", owner: "Pooja Nair", start: "2027-01-11", end: "2027-03-12", progress: 0, status: "Not started", isMilestone: false, dependsOn: ["mp3"],
+          description: "**What:** The main v2 launch burst across streaming video and digital channels, measured with geo-holdout tests." }
+      ]
+    },
+    {
+      id: "hiring", name: "Hiring", color: "#4a3aa7", owner: "Farah Khan",
+      goal: "Hire the 12 people needed to deliver the v2 roadmap without slowing delivery.",
+      tasks: [
+        { id: "h1", name: "Senior backend engineers (×3)", owner: "Farah Khan", start: "2026-09-01", end: "2026-11-20", progress: 55, status: "In progress", isMilestone: false, dependsOn: [],
+          description: "**What:** Three senior engineers with healthcare data / integrations experience.\n\n**Status:**\n- 1 offer accepted (joins 2 Nov), 2 candidates in final round\n\n**Next steps:**\n- Close remaining two by mid-November" },
+        { id: "h2", name: "Clinical operations lead", owner: "Farah Khan", start: "2026-09-15", end: "2026-10-30", progress: 80, status: "At risk", isMilestone: false, dependsOn: [],
+          description: "**What:** Senior clinician to own doctor network quality, protocols and medical review.\n\n**Blockers:**\n- Preferred candidate has a 90-day notice period\n\n**Next steps:**\n- Negotiate notice buy-out or interim consulting arrangement" },
+        { id: "h3", name: "Product designer", owner: "Aditi Rao", start: "2026-10-19", end: "2026-12-11", progress: 0, status: "Not started", isMilestone: false, dependsOn: [],
+          description: "**What:** Senior product designer for the care-plan and chronic-care experience." },
+        { id: "h4", name: "Sales account executives (×4)", owner: "Aditi Rao", start: "2026-11-02", end: "2027-01-29", progress: 0, status: "Not started", isMilestone: false, dependsOn: [],
+          description: "**What:** Four AEs for employer and clinic sales.\n\n**Why:** Clinic pipeline target is at risk without more sales capacity." },
+        { id: "h5", name: "Team fully staffed", owner: "Farah Khan", start: "2027-02-15", end: "2027-02-15", progress: 0, status: "Not started", isMilestone: true, dependsOn: ["h1", "h3", "h4"],
+          description: "**Milestone:** All 12 planned roles filled and onboarded." }
+      ]
+    }
+  ]
+};
+
+/* =====================================================================
+   APP
+   ===================================================================== */
+const STORAGE_KEY = "primecare.dashboard.v1";
+const UI_KEY = "primecare.ui.v1";
+const THEME_KEY = "primecare.theme";
+const STATUSES = ["Not started", "In progress", "Done", "At risk", "Delayed"];
+const STATUS_META = {
+  "Not started": { icon: "○", cls: "b-ns" },
+  "In progress": { icon: "◐", cls: "b-ip" },
+  "Done":        { icon: "✓", cls: "b-done" },
+  "At risk":     { icon: "⚠", cls: "b-risk" },
+  "Delayed":     { icon: "⏱", cls: "b-delay" }
+};
+// Validated categorical palette (light → dark step). Custom colours pass through unchanged.
+const PALETTE = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"];
+const DARK_STEP = { "#2a78d6": "#3987e5", "#eb6834": "#d95926", "#1baf7a": "#199e70", "#eda100": "#c98500", "#e87ba4": "#d55181", "#008300": "#008300", "#4a3aa7": "#9085e9", "#e34948": "#e66767" };
+const ZOOM_PX = { week: 30, month: 8, quarter: 2.6 };
+const ROW_H = 44, GROUP_H = 40;
+const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const DAY = 86400000;
+
+/* ---------- helpers ---------- */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const clone = o => JSON.parse(JSON.stringify(o));
+const uid = p => p + Math.random().toString(36).slice(2, 8);
+function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function lsSet(k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } }
+function safeParse(s) { try { return JSON.parse(s); } catch (e) { return null; } }
+
+const isISO = s => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s) && !isNaN(Date.parse(s));
+function toDay(s) { const [y, m, d] = s.split("-").map(Number); return Date.UTC(y, m - 1, d) / DAY; }
+function iso(n) { return new Date(n * DAY).toISOString().slice(0, 10); }
+function todayDay() { const t = new Date(); return Date.UTC(t.getFullYear(), t.getMonth(), t.getDate()) / DAY; }
+function parts(n) { const d = new Date(n * DAY); return { y: d.getUTCFullYear(), m: d.getUTCMonth(), d: d.getUTCDate(), w: d.getUTCDay() }; }
+function monthStart(n) { const p = parts(n); return Date.UTC(p.y, p.m, 1) / DAY; }
+function addMonths(n, k) { const p = parts(n); return Date.UTC(p.y, p.m + k, 1) / DAY; }
+function quarterStart(n) { const p = parts(n); return Date.UTC(p.y, p.m - (p.m % 3), 1) / DAY; }
+function fmtShort(n) { const p = parts(n); return p.d + " " + MON[p.m]; }
+function fmt(n) { const p = parts(n); return p.d + " " + MON[p.m] + " " + p.y; }
+
+function isDark() {
+  const t = document.documentElement.dataset.theme;
+  if (t === "dark") return true;
+  if (t === "light") return false;
+  return matchMedia("(prefers-color-scheme: dark)").matches;
+}
+const wsColor = ws => (isDark() && DARK_STEP[ws.color.toLowerCase()]) || ws.color;
+
+/* Tiny markdown: paragraphs, "- " bullets, **bold** */
+function md(src) {
+  const lines = String(src || "").replace(/\r/g, "").split("\n");
+  let out = "", para = [], list = [];
+  const inline = s => esc(s).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  const flushP = () => { if (para.length) { out += "<p>" + para.map(inline).join("<br>") + "</p>"; para = []; } };
+  const flushL = () => { if (list.length) { out += "<ul>" + list.map(l => "<li>" + inline(l) + "</li>").join("") + "</ul>"; list = []; } };
+  for (const raw of lines) {
+    const l = raw.trim();
+    if (!l) { flushP(); flushL(); continue; }
+    const m = l.match(/^[-*•]\s+(.*)$/);
+    if (m) { flushP(); list.push(m[1]); } else { flushL(); para.push(l); }
+  }
+  flushP(); flushL();
+  return out || '<p style="color:var(--muted)">No description yet — click Edit to add one.</p>';
+}
+function plain(src, n) {
+  const s = String(src || "").replace(/\*\*/g, "").replace(/\n+/g, " ").replace(/\s-\s/g, " · ").trim();
+  return s.length > n ? s.slice(0, n - 1) + "…" : s;
+}
+
+/* ---------- data normalisation ---------- */
+function normTask(t) {
+  const today = iso(todayDay());
+  const start = isISO(t.start) ? t.start : today;
+  let end = isISO(t.end) ? t.end : start;
+  if (toDay(end) < toDay(start)) end = start;
+  return {
+    id: String(t.id || uid("t")), name: String(t.name || "Untitled task"), owner: String(t.owner || ""),
+    start, end, progress: Math.max(0, Math.min(100, Math.round(Number(t.progress) || 0))),
+    status: STATUSES.includes(t.status) ? t.status : "Not started",
+    isMilestone: !!t.isMilestone,
+    dependsOn: Array.isArray(t.dependsOn) ? t.dependsOn.map(String) : [],
+    description: String(t.description || "")
+  };
+}
+function normalize(d) {
+  if (!d || !Array.isArray(d.workstreams)) return null;
+  return {
+    workstreams: d.workstreams.map((ws, i) => ({
+      id: String(ws.id || uid("ws")), name: String(ws.name || "Untitled workstream"),
+      color: /^#[0-9a-f]{6}$/i.test(ws.color) ? ws.color.toLowerCase() : PALETTE[i % PALETTE.length],
+      owner: String(ws.owner || ""), goal: String(ws.goal || ""),
+      tasks: Array.isArray(ws.tasks) ? ws.tasks.map(normTask) : []
+    }))
+  };
+}
+
+/* ---------- state ---------- */
+let data = normalize(safeParse(lsGet(STORAGE_KEY))) || normalize(clone(SAMPLE_DATA));
+let ui = Object.assign({ zoom: "month", collapsed: [], closedCards: [] }, safeParse(lsGet(UI_KEY)) || {});
+if (!ZOOM_PX[ui.zoom]) ui.zoom = "month";
+const filters = { ws: "", owner: "", status: "" };
+let scrollToTodayNext = true;
+let lastToday = todayDay();
+
+function saveData() {
+  if (!lsSet(STORAGE_KEY, JSON.stringify(data))) toast("Couldn't save in this browser — use Export JSON to keep a copy.");
+}
+function saveUI() { lsSet(UI_KEY, JSON.stringify(ui)); }
+
+const allTasks = () => data.workstreams.flatMap(ws => ws.tasks.map(t => ({ ws, t })));
+function findTask(id) { for (const ws of data.workstreams) { const t = ws.tasks.find(x => x.id === id); if (t) return { ws, t }; } return null; }
+function effStatus(t, today = todayDay()) {
+  if (t.status !== "Done" && toDay(t.end) < today) return { status: "Delayed", auto: t.status !== "Delayed" };
+  return { status: t.status, auto: false };
+}
+const anyFilter = () => !!(filters.ws || filters.owner || filters.status);
+function matches(ws, t, today) {
+  if (filters.ws && ws.id !== filters.ws) return false;
+  if (filters.owner && t.owner !== filters.owner) return false;
+  if (filters.status && effStatus(t, today).status !== filters.status) return false;
+  return true;
+}
+function badge(st, extra = "") {
+  const m = STATUS_META[st];
+  return `<span class="badge ${m.cls}" ${extra}><span class="ic" aria-hidden="true">${m.icon}</span>${esc(st)}</span>`;
+}
+const avg = arr => arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : 0;
+const owners = () => [...new Set(allTasks().map(x => x.t.owner).concat(data.workstreams.map(w => w.owner)).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+
+/* ---------- summary ---------- */
+function renderSummary() {
+  const today = todayDay();
+  const items = allTasks();
+  const c = { "Not started": 0, "In progress": 0, "Done": 0, "At risk": 0, "Delayed": 0 };
+  items.forEach(({ t }) => c[effStatus(t, today).status]++);
+  const pct = avg(items.map(x => x.t.progress));
+  const onTrack = c["Not started"] + c["In progress"];
+  const tile = (k, v, sub = "", icon = "", extra = "") =>
+    `<div class="stat"><div class="k">${icon}${k}</div><div class="v">${v}${sub ? ` <small>${sub}</small>` : ""}</div>${extra}</div>`;
+  const ic = st => `<span class="badge ${STATUS_META[st].cls}" style="padding:0 5px" aria-hidden="true">${STATUS_META[st].icon}</span>`;
+  $("#stats").innerHTML =
+    tile("Total tasks", items.length, `across ${data.workstreams.length} workstreams`) +
+    tile("Overall complete", pct + "%", "avg. progress", "", `<div class="meter" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100" aria-label="Overall progress"><span style="width:${pct}%"></span></div>`) +
+    tile("Done", c["Done"], "", ic("Done")) +
+    tile("On track", onTrack, "not started / in progress", ic("In progress")) +
+    tile("At risk", c["At risk"], "", ic("At risk")) +
+    tile("Delayed", c["Delayed"], "incl. overdue", ic("Delayed"));
+  $("#todayLabel").textContent = new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  $("#todayLabel").setAttribute("datetime", iso(today));
+}
+
+/* ---------- filters ---------- */
+function renderFilters() {
+  const opt = (v, l, sel) => `<option value="${esc(v)}"${sel === v ? " selected" : ""}>${esc(l)}</option>`;
+  if (filters.ws && !data.workstreams.some(w => w.id === filters.ws)) filters.ws = "";
+  const os = owners();
+  if (filters.owner && !os.includes(filters.owner)) filters.owner = "";
+  $("#fWs").innerHTML = opt("", "All", filters.ws) + data.workstreams.map(w => opt(w.id, w.name, filters.ws)).join("");
+  $("#fOwner").innerHTML = opt("", "All", filters.owner) + os.map(o => opt(o, o, filters.owner)).join("");
+  $("#fStatus").innerHTML = opt("", "All", filters.status) + STATUSES.map(s => opt(s, STATUS_META[s].icon + " " + s, filters.status)).join("");
+  $("#ownerList").innerHTML = os.map(o => `<option value="${esc(o)}">`).join("");
+  const today = todayDay();
+  const n = allTasks().filter(({ ws, t }) => matches(ws, t, today)).length;
+  $("#filterCount").textContent = anyFilter() ? `Showing ${n} of ${allTasks().length} tasks` : "";
+  $("#btnClearFilters").hidden = !anyFilter();
+}
+
+/* ---------- gantt ---------- */
+function renderGantt() {
+  const scroller = $("#ganttScroll");
+  const prevLeft = scroller.scrollLeft, prevTop = scroller.scrollTop;
+  const today = todayDay();
+  const px = ZOOM_PX[ui.zoom];
+  const labelW = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--label-w")) || 270;
+
+  // Time range: all tasks (stable while filtering) + today
+  let lo = today, hi = today;
+  allTasks().forEach(({ t }) => { lo = Math.min(lo, toDay(t.start)); hi = Math.max(hi, toDay(t.end)); });
+  let start, end;
+  if (ui.zoom === "quarter") { start = quarterStart(lo - 7); end = addMonths(quarterStart(hi + 45), 3); }
+  else { start = monthStart(lo - 7); end = addMonths(monthStart(hi + 30), 1); }
+  const W = Math.round((end - start) * px);
+  const X = d => (d - start) * px;
+
+  // Header tiers
+  const top = [], bot = [];
+  if (ui.zoom === "quarter") {
+    for (let d = start; d < end; d = addMonths(d, 3)) { const p = parts(d); top.push({ s: d, e: addMonths(d, 3), l: `Q${Math.floor(p.m / 3) + 1} ${p.y}` }); }
+    for (let d = start; d < end; d = addMonths(d, 1)) bot.push({ s: d, e: addMonths(d, 1), l: MON[parts(d).m] });
+  } else {
+    for (let d = start; d < end; d = addMonths(d, 1)) { const p = parts(d); top.push({ s: d, e: addMonths(d, 1), l: `${MON[p.m]} ${p.y}` }); }
+    if (ui.zoom === "week") {
+      for (let d = start; d < end; d++) { const p = parts(d); bot.push({ s: d, e: d + 1, l: String(p.d), we: p.w === 0 || p.w === 6, center: true }); }
+    } else {
+      let d = start + ((8 - parts(start).w) % 7); // first Monday
+      if (d > start) bot.push({ s: start, e: d, l: "" });
+      for (; d < end; d += 7) bot.push({ s: d, e: Math.min(d + 7, end), l: String(parts(d).d) });
+    }
+  }
+  const cell = (u, cls) => `<div class="tc ${cls}${u.center ? " center" : ""}" style="left:${X(u.s)}px;width:${X(u.e) - X(u.s)}px">${esc(u.l)}</div>`;
+  const todayIn = today >= start && today < end;
+  let head = `<div class="g-head"><div class="g-corner">Workstream / task</div><div class="g-tiers" style="width:${W}px">` +
+    top.map(u => cell(u, "top")).join("") + bot.map(u => cell(u, "bot")).join("") +
+    (todayIn ? `<div class="today-pill" style="left:${X(today + 0.5)}px">TODAY</div>` : "") + `</div></div>`;
+
+  // Rows
+  let rows = "", y = 0;
+  const pos = {};
+  const shown = [];
+  data.workstreams.forEach(ws => {
+    if (filters.ws && ws.id !== filters.ws) return;
+    const vis = ws.tasks.filter(t => matches(ws, t, today));
+    if (!vis.length && anyFilter()) return;
+    const c = wsColor(ws);
+    const collapsed = ui.collapsed.includes(ws.id);
+    const p = avg(ws.tasks.map(t => t.progress));
+    let sum = "";
+    if (ws.tasks.length) {
+      const s = Math.min(...ws.tasks.map(t => toDay(t.start))), e = Math.max(...ws.tasks.map(t => toDay(t.end)));
+      sum = `<div class="sumbar" style="left:${X(s)}px;width:${Math.max(4, X(e + 1) - X(s))}px" aria-hidden="true"><span style="width:${p}%"></span></div>`;
+    }
+    rows += `<div class="g-row group" style="--c:${c}">
+      <div class="g-label"><button type="button" class="g-group-btn" data-toggle-ws="${esc(ws.id)}" aria-expanded="${!collapsed}" aria-label="${esc(ws.name)}: ${vis.length} tasks, ${p}% complete. ${collapsed ? "Expand" : "Collapse"}">
+        <svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="swatch"></span><span class="nm">${esc(ws.name)}</span><span class="ct">${vis.length} · ${p}%</span></button></div>
+      <div class="g-track" style="width:${W}px">${sum}</div></div>`;
+    y += GROUP_H;
+    if (collapsed) return;
+    vis.forEach(t => {
+      const s = toDay(t.start), e = toDay(t.end);
+      const es = effStatus(t, today);
+      const flag = es.status === "At risk" ? `<span class="flag-risk">⚠ At risk</span>` : es.status === "Delayed" ? `<span class="flag-delay">⏱ Delayed</span>` : es.status === "Done" ? `<span style="color:var(--good-ink);font-weight:650">✓ Done</span>` : "";
+      let track;
+      const aria = `${t.name}, ${t.owner || "no owner"}, ${fmt(s)} to ${fmt(e)}, ${t.progress}% complete, ${es.status}. Show details`;
+      if (t.isMilestone) {
+        const cx = X(e + 0.5);
+        track = `<button type="button" class="ms${es.status === "Done" ? " done" : ""}${es.status === "Delayed" ? " delay" : ""}" data-task="${esc(t.id)}" style="left:${cx}px" aria-label="Milestone: ${esc(aria)}"></button>
+          <div class="meta" style="left:${cx + 10}px">${flag}<b>◆ ${fmtShort(e)}</b> · ${esc(t.owner)}</div>`;
+        pos[t.id] = { y: y + ROW_H / 2, xs: cx - 11, xe: cx + 11 };
+      } else {
+        const left = X(s), w = Math.max(4, X(e + 1) - X(s));
+        track = `<button type="button" class="bar${es.status === "At risk" ? " risk" : ""}${es.status === "Delayed" ? " delay" : ""}" data-task="${esc(t.id)}" style="left:${left}px;width:${w}px" aria-label="${esc(aria)}"><span class="fill" style="width:${t.progress}%"></span></button>
+          <div class="meta" style="left:${left + w}px">${flag}<b>${t.progress}%</b> · ${esc(t.owner)} · ${fmtShort(s)} – ${fmtShort(e)}</div>`;
+        pos[t.id] = { y: y + ROW_H / 2, xs: left, xe: left + w };
+      }
+      rows += `<div class="g-row" style="--c:${c}">
+        <div class="g-label"><button type="button" class="g-task-btn" data-edit="${esc(t.id)}" title="Edit "${esc(t.name)}"" aria-label="Edit task ${esc(t.name)}">
+          <span class="nm">${t.isMilestone ? '<span class="ms-mark" aria-hidden="true">◆ </span>' : ""}${esc(t.name)}</span>
+          <span class="sub">${badge(es.status)}<span class="owner">${esc(t.owner)}</span></span></button></div>
+        <div class="g-track" style="width:${W}px">${track}</div></div>`;
+      shown.push(t);
+      y += ROW_H;
+    });
+  });
+
+  // Overlay: gridlines, weekends, today line, dependency arrows
+  let ov = "";
+  if (ui.zoom === "week") bot.forEach(u => { if (u.we) ov += `<div class="weekend" style="left:${X(u.s)}px;width:${px}px"></div>`; });
+  bot.forEach(u => { ov += `<div class="gl" style="left:${X(u.s)}px"></div>`; });
+  top.forEach(u => { ov += `<div class="gl strong" style="left:${X(u.s)}px"></div>`; });
+  if (todayIn) ov += `<div class="today-line" style="left:${X(today + 0.5)}px" title="Today"></div>`;
+  let paths = "";
+  shown.forEach(t => t.dependsOn.forEach(dep => {
+    const a = pos[dep], b = pos[t.id];
+    if (!a || !b) return;
+    const x1 = a.xe, y1 = a.y, x2 = b.xs - 2, y2 = b.y;
+    let d;
+    if (x2 - 10 >= x1 + 8) d = `M${x1} ${y1} H${x1 + 8} V${y2} H${x2}`;
+    else { const ym = y2 + (y2 > y1 ? -ROW_H / 2 : ROW_H / 2); d = `M${x1} ${y1} H${x1 + 8} V${ym} H${x2 - 10} V${y2} H${x2}`; }
+    paths += `<path d="${d}" />`;
+  }));
+  ov += `<svg class="deps" width="${W}" height="${y}" aria-hidden="true">
+    <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10z" style="fill:var(--muted)"/></marker></defs>
+    <g style="fill:none;stroke:var(--muted);stroke-width:1.5" marker-end="url(#arr)">${paths.replace(/<path /g, '<path marker-end="url(#arr)" ')}</g></svg>`;
+
+  const body = rows
+    ? `<div class="g-body"><div class="g-overlay" style="width:${W}px">${ov}</div>${rows}</div>`
+    : `<div class="empty">No tasks match these filters.</div>`;
+  const g = $("#gantt");
+  g.style.width = (labelW + W) + "px";
+  g.innerHTML = head + body;
+
+  if (scrollToTodayNext) {
+    scrollToTodayNext = false;
+    scroller.scrollLeft = Math.max(0, X(today) - (scroller.clientWidth - labelW) * 0.3);
+    scroller.scrollTop = prevTop;
+  } else { scroller.scrollLeft = prevLeft; scroller.scrollTop = prevTop; }
+
+  document.querySelectorAll("#zoomSeg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.zoom === ui.zoom)));
+  const allCollapsed = data.workstreams.every(w => ui.collapsed.includes(w.id));
+  $("#btnCollapseGantt").textContent = allCollapsed ? "Expand all" : "Collapse all";
+
+  $("#legend").innerHTML = data.workstreams.map(w => `<span><i style="--c:${wsColor(w)}"></i>${esc(w.name)}</span>`).join("") +
+    `<span><i class="dia"></i>Milestone</span><span><svg width="22" height="8" aria-hidden="true"><path d="M0 4H16" stroke="currentColor" stroke-width="1.5"/><path d="M15 0l6 4-6 4z" fill="currentColor"/></svg>Dependency</span>` +
+    `<span><i style="--c:var(--today);width:2px;height:12px"></i>Today</span><span>Filled part of a bar = % complete</span>`;
+}
+
+/* ---------- details ---------- */
+function renderDetails() {
+  const today = todayDay();
+  let html = "";
+  data.workstreams.forEach(ws => {
+    if (filters.ws && ws.id !== filters.ws) return;
+    const vis = ws.tasks.filter(t => matches(ws, t, today));
+    if (!vis.length && anyFilter()) return;
+    const c = wsColor(ws);
+    const open = !ui.closedCards.includes(ws.id);
+    const p = avg(ws.tasks.map(t => t.progress));
+    const cnt = {}; ws.tasks.forEach(t => { const s = effStatus(t, today).status; cnt[s] = (cnt[s] || 0) + 1; });
+    const cntStr = STATUSES.filter(s => cnt[s]).map(s => `${STATUS_META[s].icon} ${cnt[s]} ${s.toLowerCase()}`).join(" · ");
+    const tasks = vis.map(t => {
+      const s = toDay(t.start), e = toDay(t.end), es = effStatus(t, today);
+      const deps = t.dependsOn.map(id => findTask(id)).filter(Boolean).map(x => esc(x.t.name)).join(", ");
+      return `<article class="task" id="task-${esc(t.id)}" tabindex="-1" style="--c:${c}">
+        <div class="task-top">
+          <h4>${t.isMilestone ? '<span class="ms-mark" aria-label="Milestone">◆</span> ' : ""}${esc(t.name)}</h4>
+          ${badge(es.status)}${es.auto ? `<span class="auto-note">auto-flagged: end date passed</span>` : ""}
+          <span class="pct">${t.progress}%</span>
+        </div>
+        <div class="task-meta">
+          <span><span class="lbl">Owner</span> ${esc(t.owner || "—")}</span>
+          <span><span class="lbl">${t.isMilestone ? "Due" : "Dates"}</span> ${t.isMilestone ? fmt(e) : `${fmt(s)} → ${fmt(e)} (${e - s + 1} days)`}</span>
+          ${deps ? `<span><span class="lbl">Depends on</span> ${deps}</span>` : ""}
+        </div>
+        <div class="mini" role="progressbar" aria-valuenow="${t.progress}" aria-valuemin="0" aria-valuemax="100" aria-label="${esc(t.name)} progress"><span style="width:${t.progress}%"></span></div>
+        <div class="desc">${md(t.description)}</div>
+        <div class="task-actions"><button class="btn sm" type="button" data-edit="${esc(t.id)}">Edit task &amp; description</button></div>
+      </article>`;
+    }).join("") || `<div class="empty">No tasks yet.</div>`;
+    html += `<section class="ws-card" id="ws-${esc(ws.id)}" style="--c:${c}" aria-label="${esc(ws.name)}">
+      <div class="ws-head">
+        <button class="ws-toggle" type="button" data-card="${esc(ws.id)}" aria-expanded="${open}" aria-controls="wsb-${esc(ws.id)}">
+          <svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span><h3><span class="swatch"></span>${esc(ws.name)}</h3><p class="goal">${esc(ws.goal)}</p></span>
+        </button>
+        <div class="ws-stats">
+          <div class="row"><span>Owner: <b>${esc(ws.owner || "—")}</b></span><b>${p}%</b></div>
+          <div class="pbar" role="progressbar" aria-valuenow="${p}" aria-valuemin="0" aria-valuemax="100" aria-label="${esc(ws.name)} overall progress"><span style="width:${p}%"></span></div>
+          <div>${ws.tasks.length} tasks${cntStr ? " · " + cntStr : ""}</div>
+        </div>
+        <div class="ws-actions">
+          <button class="btn sm" type="button" data-add="${esc(ws.id)}">+ Task</button>
+          <button class="btn sm" type="button" data-edit-ws="${esc(ws.id)}">Edit</button>
+        </div>
+      </div>
+      <div class="ws-body" id="wsb-${esc(ws.id)}" ${open ? "" : "hidden"}>${tasks}</div>
+    </section>`;
+  });
+  $("#cards").innerHTML = html || `<div class="panel empty">No workstreams match these filters.</div>`;
+  const allClosed = data.workstreams.every(w => ui.closedCards.includes(w.id));
+  $("#btnExpandAll").textContent = allClosed ? "Expand all" : "Collapse all";
+}
+
+function renderAll() { renderSummary(); renderFilters(); renderGantt(); renderDetails(); }
+
+/* ---------- tooltip ---------- */
+const tip = $("#tip");
+function showTip(id, x, y) {
+  const f = findTask(id); if (!f) return;
+  const { ws, t } = f, s = toDay(t.start), e = toDay(t.end), es = effStatus(t);
+  const deps = t.dependsOn.map(d => findTask(d)).filter(Boolean).map(d => esc(d.t.name)).join(", ");
+  tip.innerHTML = `<h4>${t.isMilestone ? "◆ " : ""}${esc(t.name)}</h4>
+    <div class="ws"><span class="swatch" style="--c:${wsColor(ws)}"></span>${esc(ws.name)}</div>
+    <dl><dt>Owner</dt><dd>${esc(t.owner || "—")}</dd>
+    <dt>${t.isMilestone ? "Due" : "Start"}</dt><dd>${t.isMilestone ? fmt(e) : fmt(s)}</dd>
+    ${t.isMilestone ? "" : `<dt>End</dt><dd>${fmt(e)} · ${e - s + 1} days</dd>`}
+    <dt>Progress</dt><dd>${t.progress}%</dd>
+    <dt>Status</dt><dd>${badge(es.status)}${es.auto ? ` <span class="auto-note">overdue</span>` : ""}</dd>
+    ${deps ? `<dt>Depends on</dt><dd>${deps}</dd>` : ""}</dl>
+    ${t.description ? `<div class="excerpt">${esc(plain(t.description, 170))}</div>` : ""}
+    <div class="hint">Click to see full details below</div>`;
+  tip.classList.add("show");
+  const r = tip.getBoundingClientRect();
+  let lx = x + 14, ly = y + 16;
+  if (lx + r.width > innerWidth - 8) lx = Math.max(8, x - r.width - 14);
+  if (ly + r.height > innerHeight - 8) ly = Math.max(8, y - r.height - 14);
+  tip.style.left = lx + "px"; tip.style.top = ly + "px";
+}
+const hideTip = () => tip.classList.remove("show");
+
+/* ---------- navigation ---------- */
+function scrollToTask(id) {
+  const f = findTask(id); if (!f) return;
+  if (ui.closedCards.includes(f.ws.id)) { ui.closedCards = ui.closedCards.filter(x => x !== f.ws.id); saveUI(); renderDetails(); }
+  const el = document.getElementById("task-" + id); if (!el) return;
+  el.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth", block: "center" });
+  el.focus({ preventScroll: true });
+  // Fallback for browsers/embeds where smooth scrolling doesn't run
+  setTimeout(() => { const r = el.getBoundingClientRect(); if (r.bottom < 0 || r.top > innerHeight) el.scrollIntoView({ behavior: "instant", block: "center" }); }, 900);
+  el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash");
+}
+
+/* ---------- toast ---------- */
+let toastTimer;
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 2600); }
+
+/* ---------- task dialog ---------- */
+const taskDlg = $("#taskDlg");
+function openTaskDlg(id, wsId) {
+  const f = id ? findTask(id) : null;
+  const today = iso(todayDay());
+  const t = f ? f.t : { id: "", name: "", owner: "", start: today, end: iso(todayDay() + 14), progress: 0, status: "Not started", isMilestone: false, dependsOn: [], description: "" };
+  const curWs = f ? f.ws.id : (wsId || filters.ws || data.workstreams[0]?.id);
+  if (!data.workstreams.length) { toast("Add a workstream first."); openWsDlg(); return; }
+  $("#taskDlgTitle").textContent = f ? "Edit task" : "Add task";
+  $("#tId").value = t.id;
+  $("#tName").value = t.name; $("#tOwner").value = t.owner;
+  $("#tWs").innerHTML = data.workstreams.map(w => `<option value="${esc(w.id)}"${w.id === curWs ? " selected" : ""}>${esc(w.name)}</option>`).join("");
+  $("#tStart").value = t.start; $("#tEnd").value = t.end;
+  $("#tStatus").innerHTML = STATUSES.map(s => `<option${s === t.status ? " selected" : ""}>${s}</option>`).join("");
+  $("#tProgress").value = t.progress; $("#tProgressNum").value = t.progress;
+  $("#tMilestone").checked = t.isMilestone;
+  $("#tDeps").innerHTML = data.workstreams.map(w => `<optgroup label="${esc(w.name)}">` +
+    w.tasks.filter(x => x.id !== t.id).map(x => `<option value="${esc(x.id)}"${t.dependsOn.includes(x.id) ? " selected" : ""}>${esc(x.name)}</option>`).join("") + `</optgroup>`).join("");
+  $("#tDesc").value = t.description;
+  $("#tErr").textContent = "";
+  $("#tDelete").hidden = !f;
+  syncMilestone();
+  taskDlg.showModal();
+  $("#tName").focus();
+}
+function syncMilestone() {
+  const m = $("#tMilestone").checked;
+  $("#tStart").closest(".field").style.display = m ? "none" : "";
+  $("#tEnd").closest(".field").firstChild.textContent = m ? "Milestone date" : "End date";
+}
+$("#tMilestone").addEventListener("change", syncMilestone);
+$("#tProgress").addEventListener("input", e => { $("#tProgressNum").value = e.target.value; });
+$("#tProgressNum").addEventListener("input", e => { $("#tProgress").value = e.target.value; });
+$("#tStatus").addEventListener("change", e => { if (e.target.value === "Done") { $("#tProgress").value = 100; $("#tProgressNum").value = 100; } });
+
+$("#taskForm").addEventListener("submit", e => {
+  e.preventDefault();
+  const id = $("#tId").value;
+  const ms = $("#tMilestone").checked;
+  const name = $("#tName").value.trim();
+  const end = $("#tEnd").value, start = ms ? end : $("#tStart").value;
+  const err = m => { $("#tErr").textContent = m; };
+  if (!name) return err("Please give the task a name.");
+  if (!isISO(start) || !isISO(end)) return err("Please enter valid dates.");
+  if (toDay(end) < toDay(start)) return err("End date must be on or after the start date.");
+  const task = normTask({
+    id: id || uid("t"), name, owner: $("#tOwner").value.trim(), start, end,
+    progress: $("#tProgressNum").value, status: $("#tStatus").value, isMilestone: ms,
+    dependsOn: [...$("#tDeps").selectedOptions].map(o => o.value), description: $("#tDesc").value
+  });
+  if (task.status === "Done") task.progress = 100;
+  const targetWs = data.workstreams.find(w => w.id === $("#tWs").value);
+  const f = id ? findTask(id) : null;
+  if (f && f.ws === targetWs) f.ws.tasks[f.ws.tasks.indexOf(f.t)] = task;
+  else { if (f) f.ws.tasks.splice(f.ws.tasks.indexOf(f.t), 1); targetWs.tasks.push(task); }
+  saveData(); taskDlg.close(); renderAll();
+  toast(id ? "Task updated" : "Task added");
+  setTimeout(() => scrollToTask(task.id), 60);
+});
+$("#tDelete").addEventListener("click", () => {
+  const id = $("#tId").value, f = findTask(id); if (!f) return;
+  if (!confirm(`Delete "${f.t.name}"? This can't be undone (unless you have an exported backup).`)) return;
+  f.ws.tasks.splice(f.ws.tasks.indexOf(f.t), 1);
+  allTasks().forEach(({ t }) => { t.dependsOn = t.dependsOn.filter(d => d !== id); });
+  saveData(); taskDlg.close(); renderAll(); toast("Task deleted");
+});
+
+/* ---------- workstream dialog ---------- */
+const wsDlg = $("#wsDlg");
+let wsPick = PALETTE[0];
+function renderChips() {
+  $("#wChips").innerHTML = PALETTE.map(c => `<button type="button" data-color="${c}" style="--c:${c}" aria-pressed="${c === wsPick}" aria-label="Colour ${c}"></button>`).join("") +
+    `<input type="color" id="wColor" value="${wsPick}" aria-label="Custom colour">`;
+}
+function openWsDlg(id) {
+  const ws = id ? data.workstreams.find(w => w.id === id) : null;
+  const used = data.workstreams.map(w => w.color);
+  wsPick = ws ? ws.color : (PALETTE.find(c => !used.includes(c)) || PALETTE[0]);
+  $("#wsDlgTitle").textContent = ws ? "Edit workstream" : "Add workstream";
+  $("#wId").value = ws ? ws.id : "";
+  $("#wName").value = ws ? ws.name : ""; $("#wOwner").value = ws ? ws.owner : ""; $("#wGoal").value = ws ? ws.goal : "";
+  $("#wErr").textContent = ""; $("#wDelete").hidden = !ws;
+  renderChips(); wsDlg.showModal(); $("#wName").focus();
+}
+$("#wChips").addEventListener("click", e => { const b = e.target.closest("[data-color]"); if (b) { wsPick = b.dataset.color; renderChips(); } });
+$("#wChips").addEventListener("input", e => { if (e.target.id === "wColor") { wsPick = e.target.value.toLowerCase(); $("#wChips").querySelectorAll("[data-color]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.color === wsPick))); } });
+$("#wsForm").addEventListener("submit", e => {
+  e.preventDefault();
+  const name = $("#wName").value.trim();
+  if (!name) { $("#wErr").textContent = "Please give the workstream a name."; return; }
+  const id = $("#wId").value;
+  const vals = { name, owner: $("#wOwner").value.trim(), goal: $("#wGoal").value.trim(), color: wsPick };
+  if (id) Object.assign(data.workstreams.find(w => w.id === id), vals);
+  else data.workstreams.push({ id: uid("ws"), ...vals, tasks: [] });
+  saveData(); wsDlg.close(); renderAll(); toast(id ? "Workstream updated" : "Workstream added");
+});
+$("#wDelete").addEventListener("click", () => {
+  const id = $("#wId").value, ws = data.workstreams.find(w => w.id === id); if (!ws) return;
+  if (!confirm(`Delete the "${ws.name}" workstream and its ${ws.tasks.length} tasks?`)) return;
+  const ids = ws.tasks.map(t => t.id);
+  data.workstreams = data.workstreams.filter(w => w !== ws);
+  allTasks().forEach(({ t }) => { t.dependsOn = t.dependsOn.filter(d => !ids.includes(d)); });
+  saveData(); wsDlg.close(); renderAll(); toast("Workstream deleted");
+});
+document.querySelectorAll("dialog [data-close]").forEach(b => b.addEventListener("click", () => b.closest("dialog").close()));
+
+/* ---------- events ---------- */
+const scroller = $("#ganttScroll");
+scroller.addEventListener("click", e => {
+  const tg = e.target.closest("[data-toggle-ws]");
+  if (tg) { const id = tg.dataset.toggleWs; ui.collapsed = ui.collapsed.includes(id) ? ui.collapsed.filter(x => x !== id) : [...ui.collapsed, id]; saveUI(); renderGantt(); return; }
+  const ed = e.target.closest("[data-edit]"); if (ed) { openTaskDlg(ed.dataset.edit); return; }
+  const bar = e.target.closest("[data-task]"); if (bar) { hideTip(); scrollToTask(bar.dataset.task); }
+});
+scroller.addEventListener("mousemove", e => { const b = e.target.closest("[data-task]"); if (b) showTip(b.dataset.task, e.clientX, e.clientY); else hideTip(); });
+scroller.addEventListener("mouseleave", hideTip);
+scroller.addEventListener("focusin", e => { const b = e.target.closest("[data-task]"); if (b) { const r = b.getBoundingClientRect(); showTip(b.dataset.task, r.left, r.bottom); } });
+scroller.addEventListener("focusout", hideTip);
+scroller.addEventListener("scroll", hideTip, { passive: true });
+addEventListener("keydown", e => { if (e.key === "Escape") hideTip(); });
+
+$("#cards").addEventListener("click", e => {
+  const c = e.target.closest("[data-card]");
+  if (c) { const id = c.dataset.card; ui.closedCards = ui.closedCards.includes(id) ? ui.closedCards.filter(x => x !== id) : [...ui.closedCards, id]; saveUI(); renderDetails(); document.querySelector(`[data-card="${CSS.escape(id)}"]`)?.focus(); return; }
+  const ed = e.target.closest("[data-edit]"); if (ed) return openTaskDlg(ed.dataset.edit);
+  const add = e.target.closest("[data-add]"); if (add) return openTaskDlg(null, add.dataset.add);
+  const ew = e.target.closest("[data-edit-ws]"); if (ew) return openWsDlg(ew.dataset.editWs);
+});
+
+$("#zoomSeg").addEventListener("click", e => { const b = e.target.closest("[data-zoom]"); if (!b) return; ui.zoom = b.dataset.zoom; saveUI(); scrollToTodayNext = true; renderGantt(); });
+$("#btnToday").addEventListener("click", () => { scrollToTodayNext = true; renderGantt(); });
+$("#btnCollapseGantt").addEventListener("click", () => {
+  const all = data.workstreams.every(w => ui.collapsed.includes(w.id));
+  ui.collapsed = all ? [] : data.workstreams.map(w => w.id); saveUI(); renderGantt();
+});
+$("#btnExpandAll").addEventListener("click", () => {
+  const allClosed = data.workstreams.every(w => ui.closedCards.includes(w.id));
+  ui.closedCards = allClosed ? [] : data.workstreams.map(w => w.id); saveUI(); renderDetails();
+});
+["fWs", "fOwner", "fStatus"].forEach((id, i) => $("#" + id).addEventListener("change", e => {
+  filters[["ws", "owner", "status"][i]] = e.target.value; renderFilters(); renderGantt(); renderDetails();
+}));
+$("#btnClearFilters").addEventListener("click", () => { filters.ws = filters.owner = filters.status = ""; renderAll(); });
+$("#btnAddTask").addEventListener("click", () => openTaskDlg(null));
+$("#btnAddWs").addEventListener("click", () => openWsDlg(null));
+
+$("#btnExport").addEventListener("click", () => {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = `prime-care-dashboard-${iso(todayDay())}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  toast("Exported JSON");
+});
+$("#btnImport").addEventListener("click", () => $("#fileImport").click());
+$("#fileImport").addEventListener("change", e => {
+  const file = e.target.files[0]; if (!file) return;
+  const r = new FileReader();
+  r.onload = () => {
+    const d = normalize(safeParse(r.result));
+    if (!d) { alert("That file isn't valid dashboard JSON. It needs a top-level \"workstreams\" array."); return; }
+    if (!confirm(`Replace the current data with ${d.workstreams.length} workstreams from "${file.name}"?`)) return;
+    data = d; saveData(); scrollToTodayNext = true; renderAll(); toast("Imported " + file.name);
+  };
+  r.readAsText(file); e.target.value = "";
+});
+$("#btnReset").addEventListener("click", () => {
+  if (!confirm("Replace all current data with the built-in sample data? Export first if you want to keep your changes.")) return;
+  data = normalize(clone(SAMPLE_DATA)); saveData(); scrollToTodayNext = true; renderAll(); toast("Sample data restored");
+});
+
+/* ---------- theme ---------- */
+const THEMES = ["system", "light", "dark"];
+function applyTheme(t) {
+  if (t === "system") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t;
+  $("#btnTheme").textContent = "Theme: " + t[0].toUpperCase() + t.slice(1);
+}
+let theme = THEMES.includes(lsGet(THEME_KEY)) ? lsGet(THEME_KEY) : "system";
+applyTheme(theme);
+$("#btnTheme").addEventListener("click", () => { theme = THEMES[(THEMES.indexOf(theme) + 1) % 3]; lsSet(THEME_KEY, theme); applyTheme(theme); renderAll(); });
+matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => { if (theme === "system") renderAll(); });
+
+/* ---------- live refresh ---------- */
+let resizeT, lastLabelW = getComputedStyle(document.documentElement).getPropertyValue("--label-w");
+addEventListener("resize", () => { clearTimeout(resizeT); resizeT = setTimeout(() => {
+  const lw = getComputedStyle(document.documentElement).getPropertyValue("--label-w");
+  if (lw !== lastLabelW) { lastLabelW = lw; renderGantt(); }
+}, 150); });
+// Re-render when the date changes (Today line, overdue → Delayed) and when another tab edits the data.
+setInterval(() => { const t = todayDay(); if (t !== lastToday) { lastToday = t; renderAll(); } }, 60000);
+addEventListener("storage", e => { if (e.key === STORAGE_KEY) { const d = normalize(safeParse(e.newValue)); if (d) { data = d; renderAll(); } } });
+
+renderAll();
+</script>
+</body>
+</html>
