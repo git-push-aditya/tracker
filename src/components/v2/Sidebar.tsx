@@ -40,7 +40,7 @@ export function Sidebar({ workstreams, path, user, themeLabel, canCreate, onLogo
       <SidebarHeader className="gap-3 px-3 pt-4">
         <div className="flex items-center gap-2.5 px-1">
           <Logo height={22} />
-          <span className="text-[15px] font-semibold tracking-tight text-[var(--side-ink-strong)] group-data-[collapsible=icon]:hidden">Prime Care</span>
+          <span className="font-heading text-[15px] font-semibold text-[var(--side-ink-strong)] group-data-[collapsible=icon]:hidden">Prime Care</span>
         </div>
         <Popover open={q.trim() !== ""}>
           <PopoverAnchor asChild>
@@ -62,7 +62,7 @@ export function Sidebar({ workstreams, path, user, themeLabel, canCreate, onLogo
                         <span className="c-ws size-1.5 shrink-0 rounded-full bg-[var(--c)]" style={wsVars(ws.color)} />
                         <span className="truncate">{ws.name} · {t.owner || "no owner"} · due {fmt(toDay(t.end))}</span>
                       </span>
-                      <span className="text-muted-foreground text-[11px]">{MATCH[field]}</span>
+                      <span className="text-muted-foreground text-xs">{MATCH[field]}</span>
                     </button>
                   </li>
                 ))}
@@ -154,7 +154,7 @@ export function Sidebar({ workstreams, path, user, themeLabel, canCreate, onLogo
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <SidebarMenuButton tooltip={user.username} className={cn(ROW, "pr-1.5")}>
-                    <span className="bg-[var(--side-input)] flex size-6 shrink-0 items-center justify-center rounded-full text-[11px] font-medium text-[var(--side-ink-strong)] uppercase">{user.username[0]}</span>
+                    <span className="bg-[var(--side-input)] flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-medium text-[var(--side-ink-strong)] uppercase">{user.username[0]}</span>
                     <span className="flex-1 truncate">{user.username}</span>
                     <MoreVertical className="ml-auto group-data-[collapsible=icon]:hidden" />
                   </SidebarMenuButton>

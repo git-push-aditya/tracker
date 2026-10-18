@@ -67,7 +67,7 @@ export function History() {
   const clear = () => { setWs("all"); setOwner("all"); setType("all"); };
   return (
     <>
-      <h1 className="text-2xl font-semibold tracking-tight">History</h1>
+      <h1 className="font-display text-[28px] leading-[1.2] font-bold">History</h1>
       <p className="text-muted-foreground text-sm">Every task that was completed or deleted, newest first</p>
       <Card className="mt-6 gap-0 py-0 shadow-sm">
         <div className="flex flex-wrap items-center gap-3 border-b px-6 py-4">
@@ -75,7 +75,7 @@ export function History() {
           <Filter label="Owner" value={owner} onChange={setOwner} options={(opts.data?.owners ?? []).map((o) => [o.id, o.name])} loading={opts.isPending} />
           <Filter label="Status" value={type} onChange={setType} options={[["COMPLETED", "Completed"], ["DELETED", "Deleted"]]} />
           {filtered && <Button variant="ghost" size="sm" type="button" onClick={clear}>Clear filters</Button>}
-          <span className="text-muted-foreground ml-auto text-sm">{q.isPending ? "" : events.length}{q.hasNextPage ? "+" : ""} event{events.length === 1 ? "" : "s"}</span>
+          <span className="text-muted-foreground ml-auto text-sm tabular-nums">{q.isPending ? "" : events.length}{q.hasNextPage ? "+" : ""} event{events.length === 1 ? "" : "s"}</span>
         </div>
         <CardContent className="p-0">
           {first?.demo ? <p className="text-muted-foreground p-10 text-center text-sm">History needs the database; this is demo mode.</p>
@@ -102,7 +102,7 @@ export function History() {
                   ))}
                   {events.map((e) => (
                     <TableRow key={e.id}>
-                      <TableCell className="text-muted-foreground pl-6 whitespace-nowrap">{when(e.at)}</TableCell>
+                      <TableCell className="text-muted-foreground pl-6 font-mono text-[13px] whitespace-nowrap tabular-nums">{when(e.at)}</TableCell>
                       <TableCell><Badge variant={e.type === "DELETED" ? "destructive" : "secondary"}>{e.type === "DELETED" ? "Deleted" : "Completed"}</Badge></TableCell>
                       <TableCell className="font-medium">{e.taskName}{e.note && <div className="text-muted-foreground text-xs font-normal">{e.note}</div>}</TableCell>
                       <TableCell>{e.workstreamName}</TableCell>

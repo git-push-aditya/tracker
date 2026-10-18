@@ -7,7 +7,7 @@ const TITLES = { dashboard: "Dashboard", settings: "Settings", history: "History
 export function TopBar({ view, wsName }: { view: "dashboard" | "ws" | "settings" | "history"; wsName?: string }) {
   const trail = view === "ws" ? ["Workstreams", wsName ?? "Not found"] : [TITLES[view]];
   return (
-    <div className="bg-[var(--side-card)] border-[var(--side-card-border)] sticky top-0 z-30 flex h-[52px] shrink-0 items-center gap-2 border-b px-4 text-[13px]">
+    <div className="bg-[var(--side-card)] border-[var(--side-card-border)] sticky top-0 z-30 font-heading flex h-[52px] shrink-0 items-center gap-2 border-b px-4 text-[13px]">
       <SidebarTrigger className="md:hidden" />
       <FileText className="text-muted-foreground size-4" strokeWidth={1.5} aria-hidden="true" />
       <nav aria-label="Breadcrumb" className="flex items-center gap-1.5">

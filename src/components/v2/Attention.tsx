@@ -103,7 +103,7 @@ export function AttentionList({ workstreams, today, canEdit }: { workstreams: Wo
                     </Link>
                   </TableCell>
                   <TableCell className="text-muted-foreground">{t.owner || "—"}</TableCell>
-                  <TableCell className="text-muted-foreground whitespace-nowrap">{fmt(toDay(t.end))}</TableCell>
+                  <TableCell className="text-muted-foreground whitespace-nowrap tabular-nums">{fmt(toDay(t.end))}</TableCell>
                   <TableCell><Badge variant={overdue ? "destructive" : "outline"}>{reason}</Badge></TableCell>
                   <TableCell><StatusBadge status={status} /></TableCell>
                   <TableCell className="text-right tabular-nums">{t.progress}%</TableCell>

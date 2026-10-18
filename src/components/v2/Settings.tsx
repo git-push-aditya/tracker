@@ -247,7 +247,7 @@ export function Settings({ workstreams, user, demo, permissions }: {
 }) {
   return (
     <>
-      <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+      <h1 className="font-display text-[28px] leading-[1.2] font-bold">Settings</h1>
       <p className="text-muted-foreground text-sm">Account, workstreams and team</p>
       <div className="mt-6 grid gap-6">
         {demo ? <Card><CardContent className="text-muted-foreground text-sm">Account and team settings need the database; this is demo mode.</CardContent></Card> : <Account />}
