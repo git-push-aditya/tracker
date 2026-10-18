@@ -3,11 +3,12 @@ import { useQueryClient } from "@tanstack/react-query";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useDashboard, useDeleteTask, useDeleteWorkstream, useImport, useSaveTask, useSaveWorkstream } from "@/hooks/useDashboard";
+import { ACTORS_KEY, useActors } from "@/hooks/v2/useActors";
 import { useMe } from "@/hooks/useMe";
 import { useTheme } from "@/hooks/useTheme";
 import { useToday } from "@/hooks/useToday";
 import { useUiState, type Ui } from "@/hooks/useUiState";
-import { allTasks, anyFilter, findTask, matches, NO_FILTERS, suggestedOwners, taskOwners, type Filters } from "@/lib/dashboard";
+import { allTasks, anyFilter, findTask, matches, NO_FILTERS, taskOwners, type Filters } from "@/lib/dashboard";
 import { buildTask, type TaskForm, type WorkstreamValues } from "@/lib/dashboard-ops";
 import { iso, parts } from "@/lib/date";
 import { layoutGantt } from "@/lib/gantt-layout";
@@ -18,7 +19,7 @@ import type { Workstream } from "@/lib/schemas";
 import { onToast } from "@/lib/toast";
 import { AttentionList } from "./Attention";
 import { WorkstreamCard } from "./Details";
-import { OwnerList, TaskDialog, WorkstreamDialog } from "./Dialogs";
+import { TaskDialog, WorkstreamDialog } from "./Dialogs";
 import { Footer } from "./Footer";
 import { FilterBar, Gantt, GanttPanel, GanttScroll, GanttToolbar, Legend, Tooltip } from "./Gantt";
 import { History } from "./History";
@@ -79,6 +80,12 @@ function Board({ source, workstreams, today, ui, setUi, theme, me, reset }: {
     owner: owners.includes(picked.owner) ? picked.owner : "",
     status: picked.status,
   };
+
+  // The history log only grows when a task is completed or deleted here, so that is the only time it is refetched.
+  const people = useActors(workstreams, demo);
+  // a save, an import or a delete can add (or free up) people
+  const refreshActors = () => void qc.invalidateQueries({ queryKey: ACTORS_KEY });
+  const refreshHistory = () => void qc.invalidateQueries({ queryKey: ["history"] });
 
   /* ---------- toast ---------- */
   const [toastMsg, setToastMsg] = useState("");
@@ -180,22 +187,22 @@ function Board({ source, workstreams, today, ui, setUi, theme, me, reset }: {
     setDlg(null);
     toast(f.id ? "Task updated" : "Task added");
     // resolves to the final id (assigned by the server in db mode), after the refetch
-    saveTask.mutateAsync({ task: r.task, wsId: f.wsId, isNew: !f.id }).then((id) => { if (view === "ws") scrollToTask(id, f.wsId); }, () => {});
+    saveTask.mutateAsync({ task: r.task, wsId: f.wsId, isNew: !f.id }).then((id) => { refreshActors(); if (f.status === "Done") refreshHistory(); if (view === "ws") scrollToTask(id, f.wsId); }, () => {});
   }
   function onDeleteTask(id: string) {
     const f = findTask(workstreams, id); if (!f) return;
     if (!confirm(`Delete "${f.t.name}"? This can't be undone (unless you have an exported backup).`)) return;
-    deleteTask.mutate(id); setDlg(null); toast("Task deleted");
+    deleteTask.mutateAsync(id).then(refreshHistory, () => {}); setDlg(null); toast("Task deleted");
   }
   function onSaveWs(v: WorkstreamValues, id: string | null) {
     if (!v.name) return "Please give the workstream a name.";
-    saveWs.mutate({ values: v, id: id ?? undefined }); setDlg(null);
+    saveWs.mutateAsync({ values: v, id: id ?? undefined }).then(refreshActors, () => {}); setDlg(null);
     toast(id ? "Workstream updated" : "Workstream added");
   }
   function onDeleteWs(id: string) {
     const ws = workstreams.find((w) => w.id === id); if (!ws) return;
     if (!confirm(`Delete the "${ws.name}" workstream and its ${ws.tasks.length} tasks?`)) return;
-    deleteWs.mutate(id); setDlg(null); toast("Workstream deleted");
+    deleteWs.mutateAsync(id).then(refreshHistory, () => {}); setDlg(null); toast("Workstream deleted");
   }
 
   /* ---------- export / import / reset ---------- */
@@ -212,7 +219,7 @@ function Board({ source, workstreams, today, ui, setUi, theme, me, reset }: {
     try { d = normalizeImport(JSON.parse(await file.text())); }
     catch { alert("That file isn't valid dashboard JSON. It needs a top-level \"workstreams\" array."); return; }
     if (!confirm(`Replace the current data with ${d.workstreams.length} workstreams from "${file.name}"?`)) return;
-    importData.mutate(d.workstreams); requestToday(); toast("Imported " + file.name);
+    importData.mutateAsync(d.workstreams).then(() => { refreshHistory(); refreshActors(); }, () => {}); requestToday(); toast("Imported " + file.name);
   }
   async function resetSample() {
     if (!confirm("Replace all current data with the built-in sample data? Export first if you want to keep your changes.")) return;
@@ -304,14 +311,13 @@ function Board({ source, workstreams, today, ui, setUi, theme, me, reset }: {
       <Tooltip workstreams={workstreams} today={today} taskId={tip.id || undefined} show={tip.show} ref={tipRef} />
       <Toast message={toastMsg} show={toastShow} />
       {canEdit && dlg?.kind === "task" && (
-        <TaskDialog key={dlg.n} workstreams={workstreams} task={editTask} wsId={dlg.wsId} today={today}
+        <TaskDialog key={dlg.n} workstreams={workstreams} owners={people} task={editTask} wsId={dlg.wsId} today={today}
           onSave={onSaveTask} onDelete={() => dlg.id && onDeleteTask(dlg.id)} onClose={() => setDlg(null)} />
       )}
       {canEdit && dlg?.kind === "ws" && (
-        <WorkstreamDialog key={dlg.n} workstreams={workstreams} ws={editWs}
+        <WorkstreamDialog key={dlg.n} workstreams={workstreams} owners={people} ws={editWs}
           onSave={(v) => onSaveWs(v, dlg.id)} onDelete={() => dlg.id && onDeleteWs(dlg.id)} onClose={() => setDlg(null)} />
       )}
-      <OwnerList owners={suggestedOwners(workstreams)} />
     </>
   );
 }

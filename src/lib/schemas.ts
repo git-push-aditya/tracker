@@ -88,6 +88,8 @@ export const PasswordChange = z
 
 const Username = z.string().trim().toLowerCase().regex(/^[a-z0-9._-]{3,32}$/, "3–32 chars: a-z 0-9 . _ -");
 export const UsernameChange = z.object({ currentPassword: z.string().min(1).max(200), username: Username });
+export const ActorRename = z.object({ name: z.string().trim().min(1, "Name is required").max(80) });
+export const ActorMerge = z.object({ intoId: z.string().min(1) });
 export const UserCreate = z.object({ username: Username, password: Password, roleId: z.string().min(1), isActive: z.boolean().default(true) });
 export const UserPatch = z.object({ roleId: z.string().min(1), isActive: z.boolean(), password: Password }).partial();
 

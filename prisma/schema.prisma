@@ -16,15 +16,30 @@ enum TaskStatus {
 }
 
 model Workstream {
-  id        String   @id @default(cuid())
-  name      String
-  color     String
-  owner     String   @default("")
-  goal      String   @default("")
-  position  Int
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  tasks     Task[]
+  id         String   @id @default(cuid())
+  name       String
+  color      String
+  owner      String   @default("")
+  goal       String   @default("")
+  ownerId    String?
+  ownerActor Actor?   @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  position   Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  tasks      Task[]
+
+  @@index([ownerId])
+}
+
+// A person who can own work. Separate from User (people who can log in). `owner` text on Task/Workstream/TaskEvent
+// is the denormalised display name; the server keeps it equal to the actor's name (see src/lib/actors.ts).
+model Actor {
+  id          String       @id @default(cuid())
+  name        String
+  nameKey     String       @unique
+  createdAt   DateTime     @default(now())
+  tasks       Task[]
+  workstreams Workstream[]
 }
 
 model Task {
@@ -33,6 +48,8 @@ model Task {
   workstream   Workstream       @relation(fields: [workstreamId], references: [id], onDelete: Cascade)
   name         String
   owner        String           @default("")
+  ownerId      String?
+  ownerActor   Actor?           @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   start        DateTime         @db.Date
   end          DateTime         @db.Date
   progress     Int
@@ -46,6 +63,7 @@ model Task {
   dependents   TaskDependency[] @relation("Prerequisite")
 
   @@index([workstreamId, position])
+  @@index([ownerId])
 }
 
 enum TaskEventType {
@@ -64,12 +82,14 @@ model TaskEvent {
   workstreamId   String
   workstreamName String
   owner          String        @default("")
-  actor          String? // username at the time; null for backfilled rows
+  ownerId        String? // the Actor who owned the task (no FK: survives the actor too)
+  actor          String? // login username of whoever did it (NOT an Actor); null for backfilled rows
   note           String        @default("")
 
   @@index([at(sort: Desc), id(sort: Desc)])
   @@index([workstreamId])
   @@index([owner])
+  @@index([ownerId])
 }
 
 model TaskDependency {

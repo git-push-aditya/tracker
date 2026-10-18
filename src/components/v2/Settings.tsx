@@ -2,6 +2,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api, ApiError } from "@/lib/api";
+import { ACTORS_KEY, type ActorRow } from "@/hooks/v2/useActors";
 import { can } from "@/lib/auth-rules";
 import { wsVars } from "@/lib/palette";
 import { PasswordChange } from "@/lib/schemas";
@@ -129,6 +130,61 @@ function RoleSelect({ roles, ...props }: { roles?: Role[] } & React.ComponentPro
   );
 }
 
+function People() {
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ACTORS_KEY, queryFn: () => api<{ actors: ActorRow[] }>("GET", "/api/actors"), staleTime: Infinity, refetchOnWindowFocus: false });
+  const [editing, setEditing] = useState<{ id: string; name: string } | null>(null);
+  const done = () => { // owner text changes on tasks, workstreams and history rows
+    void qc.invalidateQueries({ queryKey: ACTORS_KEY }); void qc.invalidateQueries({ queryKey: ["dashboard"] }); void qc.invalidateQueries({ queryKey: ["history"] });
+  };
+  const act = useMutation({
+    mutationFn: (v: { method: string; path: string; body?: object }) => api(v.method, v.path, v.body),
+    onSuccess: () => { setEditing(null); done(); },
+  });
+  const actors = q.data?.actors ?? [];
+  return (
+    <Section title="People" desc="Everyone who can own a task or workstream. Merge duplicates here; they are not login accounts.">
+      {act.error && <p className="text-destructive mb-3 text-sm" role="alert">{(act.error as ApiError).message}</p>}
+      <Table>
+        <TableHeader className="bg-muted/60">
+          <TableRow><TableHead>Name</TableHead><TableHead>Tasks</TableHead><TableHead>Workstreams</TableHead><TableHead className="text-right">Actions</TableHead></TableRow>
+        </TableHeader>
+        <TableBody>
+          {actors.map((a) => (
+            <TableRow key={a.id}>
+              <TableCell className="font-medium">
+                {editing?.id === a.id ? (
+                  <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); act.mutate({ method: "PATCH", path: `/api/actors/${a.id}`, body: { name: editing.name } }); }}>
+                    <Input autoFocus value={editing.name} maxLength={80} aria-label={`New name for ${a.name}`} onChange={(e) => setEditing({ id: a.id, name: e.target.value })} />
+                    <Button size="sm" type="submit" disabled={act.isPending}>Save</Button>
+                    <Button size="sm" variant="outline" type="button" onClick={() => setEditing(null)}>Cancel</Button>
+                  </form>
+                ) : a.name}
+              </TableCell>
+              <TableCell>{a.taskCount}</TableCell>
+              <TableCell>{a.workstreamCount}</TableCell>
+              <TableCell className="flex justify-end gap-2">
+                <Button size="sm" variant="outline" type="button" onClick={() => setEditing({ id: a.id, name: a.name })}>Rename</Button>
+                <Select value="" onValueChange={(intoId) => {
+                  const into = actors.find((x) => x.id === intoId);
+                  if (into && confirm(`Merge "${a.name}" into "${into.name}"? Everything "${a.name}" owns moves to "${into.name}".`)) act.mutate({ method: "POST", path: `/api/actors/${a.id}/merge`, body: { intoId } });
+                }}>
+                  <SelectTrigger size="sm" className="w-36" aria-label={`Merge ${a.name} into`}><SelectValue placeholder="Merge into…" /></SelectTrigger>
+                  <SelectContent>{actors.filter((x) => x.id !== a.id).map((x) => <SelectItem key={x.id} value={x.id}>{x.name}</SelectItem>)}</SelectContent>
+                </Select>
+                <Button size="sm" variant="outline" className="text-destructive" type="button" disabled={a.taskCount + a.workstreamCount > 0}
+                  title={a.taskCount + a.workstreamCount > 0 ? "Still owns work: merge instead" : undefined}
+                  onClick={() => confirm(`Delete "${a.name}"?`) && act.mutate({ method: "DELETE", path: `/api/actors/${a.id}` })}>Delete</Button>
+              </TableCell>
+            </TableRow>
+          ))}
+          {!actors.length && <TableRow><TableCell colSpan={4} className="text-muted-foreground py-6 text-center">{q.isPending ? "Loading…" : "No people yet. They appear when you give a task or workstream an owner."}</TableCell></TableRow>}
+        </TableBody>
+      </Table>
+    </Section>
+  );
+}
+
 function Team({ me }: { me: string }) {
   const qc = useQueryClient();
   const users = useQuery({ queryKey: ["users"], queryFn: () => api<{ users: User[] }>("GET", "/api/users"), select: (d) => d.users });
@@ -196,6 +252,7 @@ export function Settings({ workstreams, user, demo, permissions }: {
       <div className="mt-6 grid gap-6">
         {demo ? <Card><CardContent className="text-muted-foreground text-sm">Account and team settings need the database; this is demo mode.</CardContent></Card> : <Account />}
         <Workstreams workstreams={workstreams} canCreate={can(permissions, "workstream:create")} canEdit={can(permissions, "workstream:update")} />
+        {!demo && can(permissions, "actors:manage") && <People />}
         {!demo && can(permissions, "users:manage") && can(permissions, "roles:read") && <Team me={user?.username ?? ""} />}
       </div>
     </>

@@ -619,3 +619,6 @@ What changed (everything else in this plan is unchanged):
 - Backfill: tasks already Done got a COMPLETED row at their `updatedAt`. Tasks deleted before this migration are not recoverable.
 - `GET /api/history?workstream=&owner=&type=&cursor=` (dashboard:read), 50 per page; `/v2/history` page with Workstream / Owner / Status (Completed, Deleted) filters and "Load more".
 - v1 is unaffected in the UI, but its deletes/completions are logged too (the logging lives in the shared API routes).
+
+### /v2 Actors (task owners)
+Owners are now a managed list (`Actor` table, migration `20261018180000_actors`); see `docs/actors-implementation.md`. The `owner` text columns are kept and always equal the actor's name, so v1, export and import are unchanged.

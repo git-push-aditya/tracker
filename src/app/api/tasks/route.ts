@@ -4,6 +4,7 @@ import { handle, HttpError, parseBody } from "@/lib/http";
 import { prisma } from "@/lib/prisma";
 import { TaskInput } from "@/lib/schemas";
 import { statusToDb } from "@/lib/status";
+import { ownerColumns } from "@/lib/actors";
 import { logTaskEvents } from "@/lib/task-events";
 import { assertDepsExist } from "@/lib/task-deps";
 
@@ -19,6 +20,7 @@ export const POST = handle(async (req) => {
     const created = await tx.task.create({
       data: {
         ...rest,
+        ...(await ownerColumns(tx, rest.owner)),
         start: new Date(start),
         end: new Date(end),
         status: statusToDb(status),

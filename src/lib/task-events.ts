@@ -1,7 +1,7 @@
 import type { Prisma } from "@/generated/prisma/client";
 
 type Tx = Prisma.TransactionClient;
-type Snap = { id: string; name: string; owner: string; workstreamId: string };
+type Snap = { id: string; name: string; owner: string; ownerId?: string | null; workstreamId: string };
 
 // Writes into TaskEvent from inside the same transaction as the change, so the log can't drift from the data.
 export async function logTaskEvents(
@@ -11,7 +11,7 @@ export async function logTaskEvents(
   const names = new Map((await tx.workstream.findMany({ where: { id: { in: [...new Set(tasks.map((t) => t.workstreamId))] } }, select: { id: true, name: true } })).map((w) => [w.id, w.name]));
   await tx.taskEvent.createMany({
     data: tasks.map((t) => ({
-      type, actor, note, taskId: t.id, taskName: t.name, owner: t.owner,
+      type, actor, note, taskId: t.id, taskName: t.name, owner: t.owner, ownerId: t.ownerId ?? null,
       workstreamId: t.workstreamId, workstreamName: names.get(t.workstreamId) ?? t.workstreamId,
     })),
   });

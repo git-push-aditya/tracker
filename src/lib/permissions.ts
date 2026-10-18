@@ -12,6 +12,7 @@ export const PERMISSIONS = {
   "users:manage": "Create, edit and delete users",
   "roles:read": "List roles and permissions",
   "roles:manage": "Create, edit and delete roles",
+  "actors:manage": "Rename, merge and delete people (task owners)",
 } as const;
 
 export type PermissionKey = keyof typeof PERMISSIONS;

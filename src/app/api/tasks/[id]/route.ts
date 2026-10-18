@@ -4,6 +4,7 @@ import { handle, HttpError, parseBody } from "@/lib/http";
 import { prisma } from "@/lib/prisma";
 import { TaskUpdate } from "@/lib/schemas";
 import { statusToDb } from "@/lib/status";
+import { ownerColumns } from "@/lib/actors";
 import { logTaskEvents } from "@/lib/task-events";
 import { assertDepsExist } from "@/lib/task-deps";
 
@@ -21,12 +22,14 @@ export const PUT = handle(async (req, ctx: RouteContext<"/api/tasks/[id]">) => {
       throw new HttpError(400, "Unknown workstream");
     await assertDepsExist(tx, deps);
 
+    const owner = await ownerColumns(tx, rest.owner);
     const moved = current.workstreamId !== rest.workstreamId; // moving → end of the target workstream
     const max = moved ? await tx.task.aggregate({ where: { workstreamId: rest.workstreamId }, _max: { position: true } }) : null;
     const { count } = await tx.task.updateMany({
       where: { id, updatedAt: new Date(expectedUpdatedAt) },
       data: {
         ...rest,
+        ...owner,
         start: new Date(start),
         end: new Date(end),
         status: statusToDb(status),
@@ -48,7 +51,7 @@ export const DELETE = handle(async (req, ctx: RouteContext<"/api/tasks/[id]">) =
   const session = await authorize(req, "task:delete");
   const { id } = await ctx.params;
   await prisma().$transaction(async (tx) => {
-    const task = await tx.task.findUnique({ where: { id }, select: { id: true, name: true, owner: true, workstreamId: true } });
+    const task = await tx.task.findUnique({ where: { id }, select: { id: true, name: true, owner: true, ownerId: true, workstreamId: true } });
     if (!task) throw new HttpError(404, "Task not found");
     await logTaskEvents(tx, "DELETED", session?.user.username ?? null, [task]);
     await tx.task.delete({ where: { id } }); // deps cascade

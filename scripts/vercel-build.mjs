@@ -5,5 +5,6 @@ const run = (cmd) => execSync(cmd, { stdio: "inherit" }); // throws → build fa
 if (process.env.VERCEL_ENV === "production") {
   run("npx prisma migrate deploy");
   run("npx prisma db seed");
+  run("npx tsx scripts/backfill-actors.ts");
 }
 run("npx next build");

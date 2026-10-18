@@ -10,13 +10,10 @@ import { Checkbox } from "./ui/checkbox";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
+import { OwnerSelect } from "./OwnerSelect";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Slider } from "./ui/slider";
 import { Textarea } from "./ui/textarea";
-
-export function OwnerList({ owners }: { owners: string[] }) {
-  return <datalist id="ownerList">{owners.map((o) => <option key={o} value={o} />)}</datalist>;
-}
 
 export function ColorChips({ value, onChange }: { value: string; onChange: (c: string) => void }) {
   return (
@@ -44,14 +41,15 @@ const Modal = ({ title, onClose, children }: { title: string; onClose: () => voi
   </Dialog>
 );
 
-export function TaskDialog({ workstreams, task, wsId, today, onSave, onDelete, onClose }: {
-  workstreams: Workstream[]; task: Task | null; wsId?: string; today: number;
+export function TaskDialog({ workstreams, owners, task, wsId, today, onSave, onDelete, onClose }: {
+  workstreams: Workstream[]; owners: string[]; task: Task | null; wsId?: string; today: number;
   onSave: (f: TaskForm & { wsId: string }) => string | void; // returns an error message to show
   onDelete: () => void; onClose: () => void;
 }) {
   const edit = !!task;
   const t: Task = task ?? { id: "", name: "", owner: "", start: iso(today), end: iso(today + 14), progress: 0, status: "Not started", isMilestone: false, dependsOn: [], description: "" };
   const [ws, setWs] = useState((task && workstreams.find((w) => w.tasks.some((x) => x.id === task.id))?.id) || wsId || workstreams[0]?.id || "");
+  const [owner, setOwner] = useState(t.owner);
   const [milestone, setMilestone] = useState(t.isMilestone);
   const [progress, setProgress] = useState(String(t.progress));
   const [status, setStatus] = useState<string>(t.status);
@@ -67,7 +65,7 @@ export function TaskDialog({ workstreams, task, wsId, today, onSave, onDelete, o
         const f = new FormData(e.currentTarget);
         const v = (k: string) => String(f.get(k) ?? "");
         setErr(onSave({
-          id: t.id, wsId: ws, name: v("name"), owner: v("owner"), start: v("start"), end: v("end"), status,
+          id: t.id, wsId: ws, name: v("name"), owner, start: v("start"), end: v("end"), status,
           progress, isMilestone: milestone, dependsOn: deps, description: v("description"),
         }) ?? "");
       }}>
@@ -79,7 +77,7 @@ export function TaskDialog({ workstreams, task, wsId, today, onSave, onDelete, o
               <SelectContent>{workstreams.map((w) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}</SelectContent>
             </Select>
           </Field>
-          <Field label="Owner"><Input name="owner" list="ownerList" maxLength={80} defaultValue={t.owner} /></Field>
+          <Field label="Owner"><OwnerSelect value={owner} onChange={setOwner} owners={owners} /></Field>
           {!milestone && <Field label="Start date"><Input type="date" name="start" required defaultValue={t.start} /></Field>}
           <Field label={milestone ? "Milestone date" : "End date"}><Input type="date" name="end" required defaultValue={t.end} /></Field>
           <Field label="Status">
@@ -135,13 +133,14 @@ export function TaskDialog({ workstreams, task, wsId, today, onSave, onDelete, o
   );
 }
 
-export function WorkstreamDialog({ workstreams, ws, onSave, onDelete, onClose }: {
-  workstreams: Workstream[]; ws: Workstream | null;
+export function WorkstreamDialog({ workstreams, owners, ws, onSave, onDelete, onClose }: {
+  workstreams: Workstream[]; owners: string[]; ws: Workstream | null;
   onSave: (v: WorkstreamValues) => string | void; onDelete: () => void; onClose: () => void;
 }) {
   const edit = !!ws;
   const used = workstreams.map((w) => w.color);
   const [color, setColor] = useState(ws ? ws.color : PALETTE.find((c) => !used.includes(c)) || PALETTE[0]); // next unused palette colour
+  const [owner, setOwner] = useState(ws?.owner ?? "");
   const [err, setErr] = useState("");
 
   return (
@@ -150,11 +149,11 @@ export function WorkstreamDialog({ workstreams, ws, onSave, onDelete, onClose }:
         e.preventDefault();
         const f = new FormData(e.currentTarget);
         const v = (k: string) => String(f.get(k) ?? "").trim();
-        setErr(onSave({ name: v("name"), owner: v("owner"), goal: v("goal"), color }) ?? "");
+        setErr(onSave({ name: v("name"), owner, goal: v("goal"), color }) ?? "");
       }}>
         <div className="grid grid-cols-2 gap-4">
           <Field label="Name"><Input name="name" required maxLength={60} defaultValue={ws?.name ?? ""} /></Field>
-          <Field label="Workstream owner"><Input name="owner" list="ownerList" maxLength={80} defaultValue={ws?.owner ?? ""} /></Field>
+          <Field label="Workstream owner"><OwnerSelect value={owner} onChange={setOwner} owners={owners} /></Field>
           <Field label="Colour" full><ColorChips value={color} onChange={setColor} /></Field>
           <Field label="Goal / objective" full><Textarea name="goal" className="min-h-20" maxLength={400} defaultValue={ws?.goal ?? ""} /></Field>
         </div>

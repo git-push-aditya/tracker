@@ -1,3 +1,4 @@
+import { ActorError } from "@/lib/actors";
 import { connection, type NextRequest } from "next/server";
 import { ZodError, type ZodType } from "zod";
 import { DatabaseUnavailableError } from "./data-source";
@@ -47,6 +48,7 @@ function toResponse(e: unknown): Response {
   if (e instanceof HttpError) return Response.json({ error: e.message, code: e.code }, { status: e.status });
   if (e instanceof ZodError) return Response.json({ error: "Invalid input", issues: e.issues }, { status: 400 });
   if (e instanceof DatabaseUnavailableError || isConnectionError(e)) return Response.json({ error: "Database unreachable" }, { status: 503 });
+  if (e instanceof ActorError) return Response.json({ error: e.message }, { status: e.status });
   if (isPrismaCode(e, "P2002")) return Response.json({ error: "Already exists" }, { status: 409 });
   if (isPrismaCode(e, "P2025")) return Response.json({ error: "Not found" }, { status: 404 });
   console.error(e);
