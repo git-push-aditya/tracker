@@ -81,6 +81,7 @@ export function GanttHeader({ layout, today }: { layout: GanttLayout; today: num
       <div className="g-tiers" style={{ width: W }}>
         {top.map((u) => <TierCell key={"t" + u.s} u={u} kind="top" X={X} />)}
         {bot.map((u) => <TierCell key={"b" + u.s} u={u} kind="bot" X={X} />)}
+        {todayIn && <div className="today-stem" style={{ left: X(today + 0.5) }} />}
         {todayIn && <div className="today-pill" style={{ left: X(today + 0.5) }}>TODAY</div>}
       </div>
     </div>

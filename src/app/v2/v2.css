@@ -177,18 +177,21 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .gantt { position: relative; }
 .g-head { display: flex; position: sticky; top: 0; z-index: 6; background: var(--surface); box-shadow: inset 0 -1px 0 var(--grid-strong); }
 .g-corner { position: sticky; left: 0; z-index: 7; width: var(--label-w); flex: none; background: var(--surface); box-shadow: inset -1px -1px 0 var(--grid-strong); padding: 0 14px 8px; font-size: 12px; font-weight: 600; color: var(--muted); display: flex; align-items: flex-end; text-transform: uppercase; letter-spacing: .04em; }
-.g-tiers { position: relative; flex: none; height: 54px; }
+.g-tiers { position: relative; flex: none; height: 78px; } /* top 24px is a strip just for the TODAY pill */
 .tc { position: absolute; display: flex; align-items: center; padding: 0 6px; font-size: 12px; color: var(--ink-2); white-space: nowrap; overflow: hidden; border-left: 1px solid var(--grid); }
-.tc.top { top: 0; height: 28px; font-weight: 600; color: var(--ink); border-left-color: var(--grid-strong); }
-.tc.bot { top: 28px; height: 26px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.tc.top { top: 24px; height: 28px; font-weight: 600; color: var(--ink); border-left-color: var(--grid-strong); }
+.tc.bot { top: 52px; height: 26px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .tc.bot.center { justify-content: center; padding: 0; }
-.today-pill { position: absolute; top: 30px; transform: translateX(-50%); background: var(--today); color: #fff; font-size: 12px; font-weight: 700; padding: 2px 7px; border-radius: 999px; z-index: 2; letter-spacing: .02em; }
+.today-pill { position: absolute; top: 2px; transform: translateX(-50%); background: var(--today); color: #fff; font-size: 12px; font-weight: 700; padding: 2px 7px; border-radius: 999px; z-index: 2; letter-spacing: .02em; }
 
 .g-body { position: relative; }
 .g-overlay { position: absolute; top: 0; bottom: 0; left: var(--label-w); pointer-events: none; z-index: 1; }
 .gl { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--grid); }
 .gl.strong { background: var(--grid-strong); }
 .weekend { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--ink) 3%, transparent); }
+/* joins the pill to the line in the body; leaves a gap so today's date number stays readable */
+.today-stem { position: absolute; top: 22px; height: 56px; width: 2px; margin-left: -1px; z-index: 1;
+  background: linear-gradient(var(--today) 0 32px, transparent 32px 52px, var(--today) 52px); }
 .today-line { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--today); }
 .deps { position: absolute; top: 0; left: 0; overflow: visible; }
 
