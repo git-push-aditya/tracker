@@ -14,6 +14,7 @@ jobs:
         with: { node-version: 22, cache: npm }
       - run: npm ci
       - run: npx eslint src
+      - run: npx next typegen # RouteContext / LayoutProps are generated types
       - run: npx tsc --noEmit
       - run: npm test
 
