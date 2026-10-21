@@ -1,13 +1,11 @@
 import type { CSSProperties } from "react";
+import logo from "@/components/icon/prime-care.svg";
 import { STATUS_META, type StatusLabel } from "@/lib/status";
 
-// Prime Care logo (shield + heartbeat), as published on the official site
+// Prime Care logo (wordmark, 474x201)
 export function Logo({ height = 40 }: { height?: number }) {
-  return (
-    <svg viewBox="0 3 76 88" height={height} width={(height * 76) / 88} aria-hidden="true">
-      <path d="M38 4L70 4Q76 4 76 12L76 50Q73 72 38 90Q3 72 0 50L0 12Q0 4 6 4Z" fill="#0C6868" /><polyline points="8,47 36,47 40,29 44,67 49,47 55,41 61,47 72,47" fill="none" stroke="#FFFFFF" strokeOpacity="0.88" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={logo.src} alt="" height={height} width={(height * 474) / 201} aria-hidden="true" />;
 }
 
 export function Chevron() {

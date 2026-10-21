@@ -38,9 +38,8 @@ export function Sidebar({ workstreams, path, user, themeLabel, canCreate, onLogo
   return (
     <Shell collapsible="icon" variant="inset">
       <SidebarHeader className="gap-3 px-3 pt-4">
-        <div className="flex items-center gap-2.5 px-1">
-          <Logo height={22} />
-          <span className="font-heading text-[15px] font-semibold text-[var(--side-ink-strong)] group-data-[collapsible=icon]:hidden">Prime Care</span>
+        <div className="flex items-center justify-center px-1">
+          <Logo height={44} />
         </div>
         <Popover open={q.trim() !== ""}>
           <PopoverAnchor asChild>
