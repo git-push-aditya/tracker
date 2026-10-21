@@ -1,11 +1,18 @@
 import type { CSSProperties } from "react";
 import logo from "@/components/icon/prime-care.svg";
+import logoDark from "@/components/icon/prime-care-dark.svg";
 import { STATUS_META, type StatusLabel } from "@/lib/status";
 
 // Prime Care logo (wordmark, 474x201)
 export function Logo({ height = 40 }: { height?: number }) {
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img src={logo.src} alt="" height={height} width={(height * 474) / 201} aria-hidden="true" />;
+  const w = (height * 474) / 201;
+  /* eslint-disable @next/next/no-img-element */
+  return (
+    <>
+      <img className="logo-light" src={logo.src} alt="" height={height} width={w} aria-hidden="true" />
+      <img className="logo-dark" src={logoDark.src} alt="" height={height} width={w} aria-hidden="true" />
+    </>
+  );
 }
 
 export function Chevron() {

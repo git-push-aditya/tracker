@@ -327,3 +327,12 @@ footer { margin-top: 40px; color: var(--muted); font-size: 12px; text-align: cen
 
 /* the logo is the shield itself, not a blue tile around an icon */
 .logo { background: none; border-radius: 0; width: auto; }
+
+/* wordmark ink is dark: swap to the light-ink variant in dark mode */
+.logo-dark { display: none; }
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) .logo-light { display: none; }
+  :root:where(:not([data-theme="light"])) .logo-dark { display: inline; }
+}
+:root[data-theme="dark"] .logo-light { display: none; }
+:root[data-theme="dark"] .logo-dark { display: inline; }

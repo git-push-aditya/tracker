@@ -416,3 +416,12 @@ input, select, textarea, .badge, .tip, .toast, .demo-banner { font-family: var(-
 /* numbers line up */
 .pct, .stat .v, .tc, .today-pill, .g-corner, input[type="number"], input[type="date"], time { font-variant-numeric: tabular-nums; }
 }
+
+/* wordmark ink is dark: swap to the light-ink variant in dark mode */
+.logo-dark { display: none; }
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) .logo-light { display: none; }
+  :root:where(:not([data-theme="light"])) .logo-dark { display: inline; }
+}
+:root[data-theme="dark"] .logo-light { display: none; }
+:root[data-theme="dark"] .logo-dark { display: inline; }
