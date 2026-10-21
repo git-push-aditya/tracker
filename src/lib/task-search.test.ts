@@ -16,3 +16,9 @@ test("ranks name > description > workstream > owner", () => {
   assert.deepEqual(searchTasks(wss, "ROHAN").map((x) => x.field), ["owner"]);
   assert.deepEqual(searchTasks(wss, "  "), []);
 });
+
+test("subtasks are searchable and carry their own fields", () => {
+  const w: Workstream[] = [{ ...wss[0], tasks: [{ ...t("p", "Launch"), subtasks: [{ ...t("s", "Write copy", "asha") }] }] }];
+  assert.deepEqual(searchTasks(w, "copy").map((h) => h.t.id), ["s"]);
+  assert.deepEqual(searchTasks(w, "asha").map((h) => h.t.id), ["s"]);
+});

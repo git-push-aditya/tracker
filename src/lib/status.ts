@@ -22,8 +22,10 @@ export const STATUS_META: Record<StatusLabel, { icon: string; cls: string }> = {
 };
 
 // A task past its end date that isn't Done shows as Delayed (derived, never stored).
-export function effStatus(t: { status: StatusLabel; end: string }, today: number) {
-  if (t.status !== "Done" && toDay(t.end) < today) return { status: "Delayed" as StatusLabel, auto: t.status !== "Delayed" };
+// A parent is also Delayed while any of its subtasks is.
+export function effStatus(t: { status: StatusLabel; end: string }, today: number, subs: { status: StatusLabel; end: string }[] = []) {
+  if (t.status !== "Done" && (toDay(t.end) < today || subs.some((s) => effStatus(s, today).status === "Delayed")))
+    return { status: "Delayed" as StatusLabel, auto: t.status !== "Delayed" };
   return { status: t.status, auto: false };
 }
 

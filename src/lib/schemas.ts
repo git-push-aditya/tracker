@@ -11,8 +11,9 @@ const Color = z.string().regex(/^#[0-9a-fA-F]{6}$/).transform((c) => c.toLowerCa
 const ExpectedUpdatedAt = z.iso.datetime();
 
 // ---- response shape (API, dummy-data.json, export) ----
-export const TaskShape = z.object({
+const TaskCore = z.object({
   id: z.string(),
+  parentId: z.string().nullable().optional(), // set on subtasks only
   name: z.string().min(1).max(140),
   owner: z.string().max(80),
   start: Iso,
@@ -24,6 +25,9 @@ export const TaskShape = z.object({
   description: z.string(),
   updatedAt: z.string().optional(), // DB mode only
 });
+export const SubtaskShape = TaskCore;
+// A subtask is a TaskCore with a parentId. One level only, so subtasks carry no subtasks of their own.
+export const TaskShape = TaskCore.extend({ subtasks: z.array(SubtaskShape).optional() }); // absent = none
 
 export const WorkstreamShape = z.object({
   id: z.string(),
@@ -59,7 +63,8 @@ const taskRules = (t: z.infer<typeof TaskBase>, ctx: z.RefinementCtx) => {
   if (t.status === "Done" && t.progress !== 100) bad("progress", "A Done task must be 100% complete");
 };
 
-export const TaskInput = TaskBase.superRefine(taskRules);
+// parentId: create as a subtask. Not on TaskUpdate: a task never changes parent (except via /promote).
+export const TaskInput = TaskBase.extend({ parentId: Id.nullish() }).superRefine(taskRules);
 export const TaskUpdate = TaskBase.extend({ expectedUpdatedAt: ExpectedUpdatedAt }).superRefine(taskRules);
 
 const WorkstreamBase = z.object({
@@ -98,4 +103,5 @@ export const RoleCreate = z.object({ name: z.string().trim().min(1).max(40), des
 export const RolePatch = z.object({ name: z.string().trim().min(1).max(40), description: z.string().max(200), permissionKeys: PermissionKeys }).partial();
 
 export type Task = z.infer<typeof TaskShape>;
+export type Subtask = z.infer<typeof SubtaskShape>;
 export type Workstream = z.infer<typeof WorkstreamShape>;

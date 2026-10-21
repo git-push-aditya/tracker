@@ -2,8 +2,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/lib/api";
 import { findTask } from "@/lib/dashboard";
-import { removeTask, removeWorkstream, upsertTask, upsertWorkstream, type WorkstreamValues } from "@/lib/dashboard-ops";
-import type { Task, Workstream } from "@/lib/schemas";
+import { promoteSubtask, removeTask, removeWorkstream, upsertSubtask, upsertTask, upsertWorkstream, type WorkstreamValues } from "@/lib/dashboard-ops";
+import type { Subtask, Task, Workstream } from "@/lib/schemas";
 import { emitToast } from "@/lib/toast";
 
 export type DashboardPayload = { source: "demo" | "db"; workstreams: Workstream[] };
@@ -71,8 +71,34 @@ export const useSaveTask = () =>
     },
   });
 
+// A subtask edit (add, inline change, dialog save). The parent's optimistic state re-averages like the server does.
+export const useSaveSubtask = () =>
+  useEdit<{ sub: Subtask; parentId: string; isNew: boolean }, string>({
+    optimistic: (w, v) => upsertSubtask(w, v.parentId, v.sub),
+    local: (v) => v.sub.id,
+    remote: async (v, before) => {
+      const parent = findTask(before, v.parentId)!;
+      const body = { ...taskBody(v.sub, parent.ws.id), parentId: v.parentId };
+      if (v.isNew) return (await api<Task>("POST", "/api/tasks", body)).id;
+      const expectedUpdatedAt = findTask(before, v.sub.id)?.t.updatedAt;
+      await api("PUT", `/api/tasks/${v.sub.id}`, { ...taskBody(v.sub, parent.ws.id), expectedUpdatedAt });
+      return v.sub.id;
+    },
+  });
+
+export const usePromoteSubtask = () =>
+  useEdit<string>({
+    optimistic: promoteSubtask,
+    local: () => undefined,
+    remote: async (id, before) => void (await api("POST", `/api/tasks/${id}/promote`, { expectedUpdatedAt: findTask(before, id)?.t.updatedAt })),
+  });
+
 export const useDeleteTask = () =>
   useEdit<string>({ optimistic: removeTask, local: () => undefined, remote: (id) => api("DELETE", `/api/tasks/${id}`) });
+
+// Deleting a parent but keeping its subtasks as standalone tasks.
+export const useDeleteTaskKeepSubtasks = () =>
+  useEdit<string>({ optimistic: (w, id) => removeTask(w, id, true), local: () => undefined, remote: (id) => api("DELETE", `/api/tasks/${id}?subtasks=keep`) });
 
 export const useSaveWorkstream = () =>
   useEdit<{ values: WorkstreamValues; id?: string }>({

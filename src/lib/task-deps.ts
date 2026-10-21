@@ -3,5 +3,6 @@ import { HttpError } from "./http";
 
 export async function assertDepsExist(tx: Prisma.TransactionClient, ids: string[]) {
   if (!ids.length) return;
-  if ((await tx.task.count({ where: { id: { in: ids } } })) !== ids.length) throw new HttpError(400, "Unknown dependency");
+  // subtasks can't be depended on (only top-level tasks), so they count as unknown
+  if ((await tx.task.count({ where: { id: { in: ids }, parentId: null } })) !== ids.length) throw new HttpError(400, "Unknown dependency");
 }

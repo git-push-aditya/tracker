@@ -61,8 +61,13 @@ model Task {
   updatedAt    DateTime         @updatedAt
   dependsOn    TaskDependency[] @relation("Dependent")
   dependents   TaskDependency[] @relation("Prerequisite")
+  // One level only: a subtask's parent has no parent (enforced in the API). Deleting a parent deletes its subtasks.
+  parentId     String?
+  parent       Task?            @relation("Subtasks", fields: [parentId], references: [id], onDelete: Cascade)
+  subtasks     Task[]           @relation("Subtasks")
 
   @@index([workstreamId, position])
+  @@index([parentId])
   @@index([ownerId])
 }
 

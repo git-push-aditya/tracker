@@ -1,20 +1,24 @@
-import { avg, findTask, type Filters, anyFilter, matches } from "@/lib/dashboard";
+import { avg, effOf, findTask, type Filters, anyFilter, matches } from "@/lib/dashboard";
 import { fmt, toDay } from "@/lib/date";
 import { md } from "@/lib/md";
 import { wsVars } from "@/lib/palette";
 import type { Task, Workstream } from "@/lib/schemas";
 import { effStatus, STATUSES, STATUS_META } from "@/lib/status";
 import { EmptyState, ProgressBar, StatusBadge } from "./ui";
+import { SubtaskList, type SubActions } from "./Subtasks";
 
-export function TaskArticle({ ws, t, all, today, canEdit }: { ws: Workstream; t: Task; all: Workstream[]; today: number; canEdit: boolean }) {
-  const s = toDay(t.start), e = toDay(t.end), es = effStatus(t, today);
+export function TaskArticle({ ws, t, all, today, canEdit, owners = [], subActions }: {
+  ws: Workstream; t: Task; all: Workstream[]; today: number; canEdit: boolean; owners?: string[]; subActions?: SubActions;
+}) {
+  const s = toDay(t.start), e = toDay(t.end), es = effOf(t, today);
+  const nSubs = t.subtasks?.length ?? 0;
   const deps = t.dependsOn.map((id) => findTask(all, id)).filter(Boolean).map((x) => x!.t.name).join(", ");
   return (
     <article className="task c-ws" id={`task-${t.id}`} tabIndex={-1} style={wsVars(ws.color)}>
       <div className="task-top">
         <h4>{t.isMilestone && <><span className="ms-mark" aria-label="Milestone">◆</span>{" "}</>}{t.name}</h4>
-        <StatusBadge status={es.status} />{es.auto && <span className="auto-note">auto-flagged: end date passed</span>}
-        <span className="pct">{t.progress}%</span>
+        <StatusBadge status={es.status} />{es.auto && <span className="auto-note">{t.subtasks?.some((x) => effStatus(x, today).status === "Delayed") && toDay(t.end) >= today ? "auto-flagged: a subtask is delayed" : "auto-flagged: end date passed"}</span>}
+        <span className="pct" title={nSubs ? `Average of ${nSubs} subtask${nSubs === 1 ? "" : "s"}` : undefined}>{t.progress}%</span>
       </div>
       <div className="task-meta">
         <span><span className="lbl">Owner</span> {t.owner || "—"}</span>
@@ -23,17 +27,18 @@ export function TaskArticle({ ws, t, all, today, canEdit }: { ws: Workstream; t:
       </div>
       <ProgressBar variant="mini" value={t.progress} label={`${t.name} progress`} />
       <div className="desc">{md(t.description)}</div>
+      <SubtaskList parent={t} owners={owners} today={today} canEdit={canEdit} actions={subActions} />
       {canEdit && <div className="task-actions"><button className="btn sm" type="button" data-edit={t.id}>Edit task &amp; description</button></div>}
     </article>
   );
 }
 
-export function WorkstreamCard({ ws, vis, all, today, open, canEdit }: {
-  ws: Workstream; vis: Task[]; all: Workstream[]; today: number; open: boolean; canEdit: boolean;
+export function WorkstreamCard({ ws, vis, all, today, open, canEdit, owners, subActions }: {
+  ws: Workstream; vis: Task[]; all: Workstream[]; today: number; open: boolean; canEdit: boolean; owners?: string[]; subActions?: SubActions;
 }) {
   const p = avg(vis.map((t) => t.progress));
   const cnt: Record<string, number> = {};
-  vis.forEach((t) => { const s = effStatus(t, today).status; cnt[s] = (cnt[s] || 0) + 1; });
+  vis.forEach((t) => { const s = effOf(t, today).status; cnt[s] = (cnt[s] || 0) + 1; });
   const cntStr = STATUSES.filter((s) => cnt[s]).map((s) => `${STATUS_META[s].icon} ${cnt[s]} ${s.toLowerCase()}`).join(" · ");
   return (
     <section className="ws-card c-ws" id={`ws-${ws.id}`} style={wsVars(ws.color)} aria-label={ws.name}>
@@ -55,7 +60,7 @@ export function WorkstreamCard({ ws, vis, all, today, open, canEdit }: {
         )}
       </div>
       <div className="ws-body" id={`wsb-${ws.id}`} hidden={!open}>
-        {vis.length ? vis.map((t) => <TaskArticle key={t.id} ws={ws} t={t} all={all} today={today} canEdit={canEdit} />) : <EmptyState>No tasks yet.</EmptyState>}
+        {vis.length ? vis.map((t) => <TaskArticle key={t.id} ws={ws} t={t} all={all} today={today} canEdit={canEdit} owners={owners} subActions={subActions} />) : <EmptyState>No tasks yet.</EmptyState>}
       </div>
     </section>
   );

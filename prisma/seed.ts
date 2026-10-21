@@ -5,7 +5,7 @@ import { PrismaClient } from "../src/generated/prisma/client";
 import { ALL_PERMISSION_KEYS, PERMISSIONS, VIEWONLY_PERMISSION_KEYS } from "../src/lib/permissions";
 
 const db = new PrismaClient({
-  adapter: new PrismaPg({ connectionString: process.env.DIRECT_URL ?? process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } }),
+  adapter: new PrismaPg({ connectionString: process.env.DIRECT_URL ?? process.env.DATABASE_URL, ssl: /@(localhost|127\.0\.0\.1)[:/]/.test(process.env.DIRECT_URL ?? process.env.DATABASE_URL ?? "") ? false : { rejectUnauthorized: false } }),
 });
 
 const WORKSTREAMS = [

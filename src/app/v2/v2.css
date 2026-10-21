@@ -174,6 +174,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 /* ---------- gantt ---------- */
 .gantt-scroll { overflow: auto; max-height: 72vh; position: relative; overscroll-behavior-x: contain; }
+.gantt-full { position: fixed; inset: 0; z-index: 40; display: flex; flex-direction: column; border-radius: 0; border: 0; }
+.gantt-full .gantt-scroll { flex: 1; max-height: none; min-height: 0; }
 .gantt { position: relative; }
 .g-head { display: flex; position: sticky; top: 0; z-index: 6; background: var(--surface); box-shadow: inset 0 -1px 0 var(--grid-strong); }
 .g-corner { position: sticky; left: 0; z-index: 7; width: var(--label-w); flex: none; background: var(--surface); box-shadow: inset -1px -1px 0 var(--grid-strong); padding: 0 14px 8px; font-size: 12px; font-weight: 600; color: var(--muted); display: flex; align-items: flex-end; text-transform: uppercase; letter-spacing: .04em; }
@@ -425,3 +427,32 @@ input, select, textarea, .badge, .tip, .toast, .demo-banner { font-family: var(-
 }
 :root[data-theme="dark"] .logo-light { display: none; }
 :root[data-theme="dark"] .logo-dark { display: inline; }
+
+/* ---- subtasks ---- */
+.subs { margin-top: 14px; padding: 10px 12px; border: 1px solid var(--grid); border-radius: 10px; background: color-mix(in srgb, var(--surface-2) 55%, transparent); }
+.subs-head { display: flex; align-items: baseline; gap: 10px; font-size: 13px; margin-bottom: 6px; }
+.subs-count { color: var(--muted); }
+.sub-row { display: grid; grid-template-columns: minmax(120px, 1.6fr) 118px 74px minmax(130px, 1.2fr) 140px 64px; gap: 8px; align-items: center; padding: 6px 0; border-top: 1px solid var(--grid); font-size: 13px; scroll-margin-top: 90px; }
+.sub-row:focus { outline: none; }
+.sub-name { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; min-width: 0; font-weight: 550; overflow-wrap: anywhere; }
+.sub-link { all: unset; cursor: pointer; }
+.sub-link:hover { text-decoration: underline; }
+.sub-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+.sub-input { height: 32px; width: 100%; min-width: 0; padding: 0 8px; border: 1px solid var(--grid-strong); border-radius: 6px; background: var(--surface); color: var(--ink); font: inherit; }
+.sub-input.pct-in { width: 54px; text-align: right; }
+.sub-pct { display: inline-flex; align-items: center; gap: 3px; font-variant-numeric: tabular-nums; }
+.sub-actions { display: flex; justify-content: flex-end; }
+.subs .mini { margin-top: 8px; }
+@media (max-width: 900px) {
+  .sub-row { grid-template-columns: 1fr 1fr; }
+  .sub-name { grid-column: 1 / -1; }
+  .sub-actions { grid-column: 1 / -1; justify-content: flex-start; }
+}
+
+/* gantt: parent toggle + indented subtask rows */
+.g-label > .g-sub-toggle { width: 28px; flex: none; justify-content: center; padding: 0 0 0 8px; }
+.g-label:has(.g-sub-toggle) > .g-task-btn { padding-left: 6px; }
+.g-row.is-sub .g-label { background: color-mix(in srgb, var(--surface-2) 45%, var(--surface)); }
+.g-row.is-sub .g-label > .g-task-btn { padding-left: 52px; }
+.g-row.is-sub .bar { top: 15px; height: 14px; }
+.sub-count { color: var(--muted); }

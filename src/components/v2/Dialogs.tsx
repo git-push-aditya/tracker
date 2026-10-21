@@ -41,14 +41,24 @@ const Modal = ({ title, onClose, children }: { title: string; onClose: () => voi
   </Dialog>
 );
 
-export function TaskDialog({ workstreams, owners, task, wsId, today, onSave, onDelete, onClose }: {
-  workstreams: Workstream[]; owners: string[]; task: Task | null; wsId?: string; today: number;
-  onSave: (f: TaskForm & { wsId: string }) => string | void; // returns an error message to show
+export type SubDraft = { name: string; owner: string; end: string }; // end "" = the parent's end
+
+export function TaskDialog({ workstreams, owners, task, parent, wsId, today, onSave, onDelete, onClose }: {
+  workstreams: Workstream[]; owners: string[]; task: Task | null; parent?: Task | null; wsId?: string; today: number; // parent: set for a subtask (new or existing)
+  onSave: (f: TaskForm & { wsId: string; subs?: SubDraft[] }) => string | void; // subs: subtasks created together with a new task. returns an error message to show
   onDelete: () => void; onClose: () => void;
 }) {
   const edit = !!task;
-  const t: Task = task ?? { id: "", name: "", owner: "", start: iso(today), end: iso(today + 14), progress: 0, status: "Not started", isMilestone: false, dependsOn: [], description: "" };
+  const sub = !!parent;
+  const kids = task?.subtasks ?? [];
+  const openKids = kids.filter((k) => k.status !== "Done").length;
+  const latestKid = kids.reduce((m, k) => (k.end > m ? k.end : m), "");
+  const t: Task = task ?? (parent
+    ? { id: "", name: "", owner: "", start: parent.start, end: parent.end, progress: 0, status: "Not started", isMilestone: false, dependsOn: [], description: "" }
+    : { id: "", name: "", owner: "", start: iso(today), end: iso(today + 14), progress: 0, status: "Not started", isMilestone: false, dependsOn: [], description: "" });
   const [ws, setWs] = useState((task && workstreams.find((w) => w.tasks.some((x) => x.id === task.id))?.id) || wsId || workstreams[0]?.id || "");
+  const [subs, setSubs] = useState<SubDraft[]>([]); // new top-level task only; an existing task adds subtasks from its details panel
+  const setSub = (i: number, patch: Partial<SubDraft>) => setSubs((l) => l.map((x, j) => (j === i ? { ...x, ...patch } : x)));
   const [owner, setOwner] = useState(t.owner);
   const [milestone, setMilestone] = useState(t.isMilestone);
   const [progress, setProgress] = useState(String(t.progress));
@@ -59,44 +69,49 @@ export function TaskDialog({ workstreams, owners, task, wsId, today, onSave, onD
   const pct = Math.min(100, Math.max(0, Number(progress) || 0));
 
   return (
-    <Modal title={edit ? "Edit task" : "Add task"} onClose={onClose}>
+    <Modal title={`${edit ? "Edit" : "Add"} ${sub ? "subtask" : "task"}`} onClose={onClose}>
       <form id="taskForm" noValidate className="grid gap-4" onSubmit={(e) => {
         e.preventDefault();
         const f = new FormData(e.currentTarget);
         const v = (k: string) => String(f.get(k) ?? "");
         setErr(onSave({
-          id: t.id, wsId: ws, name: v("name"), owner, start: v("start"), end: v("end"), status,
+          id: t.id, wsId: ws, subs: !sub && !edit ? subs : undefined, name: v("name"), owner, start: v("start"), end: v("end"), status,
           progress, isMilestone: milestone, dependsOn: deps, description: v("description"),
         }) ?? "");
       }}>
         <div className="grid grid-cols-2 gap-4">
           <Field label="Task name" full><Input name="name" required maxLength={140} defaultValue={t.name} /></Field>
-          <Field label="Workstream">
+          {sub && <p className="text-muted-foreground col-span-2 -mt-2 text-sm">Subtask of <b>{parent!.name}</b> · due on or before {parent!.end}</p>}
+          {!sub && <Field label="Workstream">
             <Select value={ws} onValueChange={setWs}>
               <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
               <SelectContent>{workstreams.map((w) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}</SelectContent>
             </Select>
-          </Field>
+          </Field>}
           <Field label="Owner"><OwnerSelect value={owner} onChange={setOwner} owners={owners} /></Field>
           {!milestone && <Field label="Start date"><Input type="date" name="start" required defaultValue={t.start} /></Field>}
-          <Field label={milestone ? "Milestone date" : "End date"}><Input type="date" name="end" required defaultValue={t.end} /></Field>
+          <Field label={milestone ? "Milestone date" : "End date"}><Input type="date" name="end" required defaultValue={t.end} max={parent?.end} min={latestKid || undefined} /></Field>
           <Field label="Status">
             <Select value={status} onValueChange={(s) => { setStatus(s); if (s === "Done") setProgress("100"); }}>
               <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-              <SelectContent>{STATUSES.map((s) => <SelectItem key={s} value={s}>{STATUS_META[s].icon} {s}</SelectItem>)}</SelectContent>
+              <SelectContent>{STATUSES.map((s) => <SelectItem key={s} value={s} disabled={s === "Done" && openKids > 0}>{STATUS_META[s].icon} {s}{s === "Done" && openKids > 0 ? ` (${openKids} subtask${openKids > 1 ? "s" : ""} not done)` : ""}</SelectItem>)}</SelectContent>
             </Select>
           </Field>
           <Field label="Progress">
-            <div className="flex items-center gap-3">
-              <Slider min={0} max={100} step={5} value={[pct]} onValueChange={([n]) => setProgress(String(n))} aria-label="Progress percent" />
-              <Input type="number" min={0} max={100} className="w-20" aria-label="Progress percent value" value={progress} onChange={(e) => setProgress(e.target.value)} />
-            </div>
+            {kids.length > 0 ? (
+              <p className="text-muted-foreground text-sm">{t.progress}% · calculated from {kids.length} subtask{kids.length === 1 ? "" : "s"}</p>
+            ) : (
+              <div className="flex items-center gap-3">
+                <Slider min={0} max={100} step={5} value={[pct]} onValueChange={([n]) => setProgress(String(n))} aria-label="Progress percent" />
+                <Input type="number" min={0} max={100} className="w-20" aria-label="Progress percent value" value={progress} onChange={(e) => setProgress(e.target.value)} />
+              </div>
+            )}
           </Field>
           <div className="col-span-2 flex items-center gap-2">
             <Checkbox id="tMilestone" checked={milestone} onCheckedChange={(c) => setMilestone(c === true)} />
             <Label htmlFor="tMilestone" className="font-normal">Milestone (shown as a diamond on the end date)</Label>
           </div>
-          <Field label="Depends on" full>
+          {!sub && <Field label="Depends on" full>
             <p className="text-muted-foreground text-xs">Tick the tasks this one waits on. Draws an arrow from each prerequisite.</p>
             <div className="max-h-40 overflow-y-auto rounded-md border p-2">
               {workstreams.every((w) => w.tasks.every((x) => x.id === t.id)) && <p className="text-muted-foreground p-1 text-sm">No other tasks yet.</p>}
@@ -114,7 +129,19 @@ export function TaskDialog({ workstreams, owners, task, wsId, today, onSave, onD
                 ) : null;
               })}
             </div>
-          </Field>
+          </Field>}
+          {!sub && !edit && <Field label="Subtasks" full>
+            <p className="text-muted-foreground text-xs">Optional. Each starts with this task&apos;s start date; leave the end date blank to use this task&apos;s end date.</p>
+            {subs.map((x, i) => (
+              <div key={i} className="grid grid-cols-[1fr_9rem_9rem_auto] items-center gap-2">
+                <Input aria-label={`Subtask ${i + 1} name`} placeholder="Subtask name" maxLength={140} value={x.name} onChange={(e) => setSub(i, { name: e.target.value })} />
+                <OwnerSelect value={x.owner} onChange={(o) => setSub(i, { owner: o })} owners={owners} />
+                <Input type="date" aria-label={`Subtask ${i + 1} end date`} value={x.end} onChange={(e) => setSub(i, { end: e.target.value })} />
+                <Button variant="ghost" size="icon-sm" type="button" aria-label={`Remove subtask ${i + 1}`} onClick={() => setSubs((l) => l.filter((_, j) => j !== i))}>✕</Button>
+              </div>
+            ))}
+            <div><Button variant="outline" size="sm" type="button" onClick={() => setSubs((l) => [...l, { name: "", owner: "", end: "" }])}>+ Add subtask</Button></div>
+          </Field>}
           <Field label="Description" full>
             <p className="text-muted-foreground text-xs">Blank line = new paragraph · start a line with &quot;- &quot; for a bullet · **bold**</p>
             <Textarea name="description" className="min-h-40" defaultValue={t.description} placeholder={"**What:** …\n\n**Why:** …\n\n**Blockers:**\n- …\n\n**Next steps:**\n- …"} />
@@ -122,7 +149,7 @@ export function TaskDialog({ workstreams, owners, task, wsId, today, onSave, onD
         </div>
         <p className="text-destructive text-sm" aria-live="polite">{err}</p>
         <DialogFooter className="sm:justify-between">
-          {edit ? <Button variant="outline" className="text-destructive" type="button" onClick={onDelete}>Delete task</Button> : <span />}
+          {edit ? <Button variant="outline" className="text-destructive" type="button" onClick={onDelete}>Delete {sub ? "subtask" : "task"}</Button> : <span />}
           <span className="flex gap-2">
             <Button variant="outline" type="button" onClick={onClose}>Cancel</Button>
             <Button type="submit">Save</Button>
@@ -166,6 +193,27 @@ export function WorkstreamDialog({ workstreams, owners, ws, onSave, onDelete, on
           </span>
         </DialogFooter>
       </form>
+    </Modal>
+  );
+}
+
+// Deleting a task that has subtasks: they go with it, or stay behind as standalone tasks.
+export function DeleteParentDialog({ task, onDeleteAll, onKeepSubtasks, onClose }: {
+  task: Task; onDeleteAll: () => void; onKeepSubtasks: () => void; onClose: () => void;
+}) {
+  const n = task.subtasks?.length ?? 0;
+  return (
+    <Modal title={`Delete "${task.name}"?`} onClose={onClose}>
+      <p className="text-muted-foreground text-sm">This task has {n} subtask{n === 1 ? "" : "s"}. What should happen to {n === 1 ? "it" : "them"}?</p>
+      <div className="grid gap-2">
+        <Button type="button" variant="outline" className="text-destructive h-auto justify-start py-3 text-left whitespace-normal" onClick={onDeleteAll}>
+          <span><b>Delete the task and its subtask{n === 1 ? "" : "s"}</b><br /><span className="text-muted-foreground font-normal">Everything is removed. This can&apos;t be undone.</span></span>
+        </Button>
+        <Button type="button" variant="outline" className="h-auto justify-start py-3 text-left whitespace-normal" onClick={onKeepSubtasks}>
+          <span><b>Delete the task, keep the subtask{n === 1 ? "" : "s"} as standalone task{n === 1 ? "" : "s"}</b><br /><span className="text-muted-foreground font-normal">Owners, dates, status and details stay as they are.</span></span>
+        </Button>
+      </div>
+      <DialogFooter><Button type="button" variant="outline" onClick={onClose}>Cancel</Button></DialogFooter>
     </Modal>
   );
 }

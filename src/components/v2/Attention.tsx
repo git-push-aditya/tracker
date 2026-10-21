@@ -2,11 +2,11 @@
 import { ChevronDown } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
-import { allTasks } from "@/lib/dashboard";
+import { attentionRows } from "@/lib/attention";
 import { fmt, toDay } from "@/lib/date";
 import { wsVars } from "@/lib/palette";
 import type { Workstream } from "@/lib/schemas";
-import { effStatus, type StatusLabel } from "@/lib/status";
+import type { StatusLabel } from "@/lib/status";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuTrigger } from "./ui/dropdown-menu";
@@ -23,22 +23,8 @@ const STATUS_OPTIONS: { key: StatusLabel; label: string }[] = [
   { key: "Not started", label: "Not started" },
   { key: "Done", label: "Done" },
 ];
-const DAYS = [1, 2, 3, 4, 5, 6, 7];
-
-const s = (n: number) => (n === 1 ? "" : "s");
-
-// A task shows when its (effective) status is ticked, OR it is not done and its due date is within `days` days.
-export function attentionRows(workstreams: Workstream[], today: number, statuses: StatusLabel[], days: number) {
-  return allTasks(workstreams).flatMap(({ ws, t }) => {
-    const { status } = effStatus(t, today);
-    const left = toDay(t.end) - today;
-    const byStatus = statuses.includes(status), soon = status !== "Done" && left >= 0 && left <= days;
-    if (!byStatus && !soon) return [];
-    const reason = status === "Delayed" && left < 0 && byStatus ? `Overdue by ${-left} day${s(-left)}`
-      : soon ? (left === 0 ? "Due today" : `Due in ${left} day${s(left)}`) : status;
-    return [{ ws, t, status, reason, overdue: left < 0 && status === "Delayed", left }];
-  }).sort((a, b) => a.left - b.left);
-}
+const DAYS = [0, 1, 2, 3, 4, 5, 6, 7]; // 0 = don't filter on due date (status only)
+const daysLabel = (d: number) => (d ? `Due in ${d} day${d === 1 ? "" : "s"}` : "Any due date");
 
 export function AttentionList({ workstreams, today, canEdit }: { workstreams: Workstream[]; today: number; canEdit: boolean }) {
   const [statuses, setStatuses] = useState<StatusLabel[]>(["Delayed", "At risk"]);
@@ -68,9 +54,9 @@ export function AttentionList({ workstreams, today, canEdit }: { workstreams: Wo
             </DropdownMenuContent>
           </DropdownMenu>
           <Select value={String(days)} onValueChange={(v) => setDays(Number(v))}>
-            <SelectTrigger size="sm" className="w-40" aria-label="Due within"><SelectValue>Due in {days} day{days === 1 ? "" : "s"}</SelectValue></SelectTrigger>
+            <SelectTrigger size="sm" className="w-40" aria-label="Due within"><SelectValue>{daysLabel(days)}</SelectValue></SelectTrigger>
             <SelectContent>
-              {DAYS.map((d) => <SelectItem key={d} value={String(d)}>{d} day{d === 1 ? "" : "s"}</SelectItem>)}
+              {DAYS.map((d) => <SelectItem key={d} value={String(d)}>{d ? `${d} day${d === 1 ? "" : "s"}` : "Off — status only"}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={wsId} onValueChange={setWsId}>
@@ -93,10 +79,10 @@ export function AttentionList({ workstreams, today, canEdit }: { workstreams: Wo
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map(({ ws, t, status, reason, overdue }) => {
+              {rows.map(({ ws, t, parent, status, reason, overdue }) => {
                 return (
                 <TableRow key={t.id}>
-                  <TableCell className="pl-6 font-medium">{t.isMilestone && "◆ "}{t.name}</TableCell>
+                  <TableCell className="pl-6 font-medium">{t.isMilestone && "◆ "}{parent && <span className="text-muted-foreground font-normal">{parent} › </span>}{t.name}</TableCell>
                   <TableCell>
                     <Link href={`/v2/ws/${ws.id}`} className="c-ws inline-flex items-center gap-2 hover:underline" style={wsVars(ws.color)}>
                       <span className="size-2.5 rounded-[3px] bg-[var(--c)]" />{ws.name}

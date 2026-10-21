@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import logo from "@/components/icon/prime-care.svg";
 import logoDark from "@/components/icon/prime-care-dark.svg";
+import flower from "@/components/icon/prime-flower.svg";
 import { STATUS_META, type StatusLabel } from "@/lib/status";
 
 // Prime Care logo (wordmark, 474x201)
@@ -13,6 +14,11 @@ export function Logo({ height = 40 }: { height?: number }) {
       <img className="logo-dark" src={logoDark.src} alt="" height={height} width={w} aria-hidden="true" />
     </>
   );
+}
+
+// Just the flower (the wordmark's mark), for tight spaces such as the collapsed sidebar
+export function Flower({ size = 28 }: { size?: number }) {
+  return <img src={flower.src} alt="" width={size} height={size} aria-hidden="true" />;
 }
 
 export function Chevron() {

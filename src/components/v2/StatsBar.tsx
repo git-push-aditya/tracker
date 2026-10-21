@@ -1,6 +1,6 @@
-import { allTasks, avg } from "@/lib/dashboard";
+import { allTasks, avg, effOf } from "@/lib/dashboard";
 import type { Workstream } from "@/lib/schemas";
-import { effStatus, STATUSES, type StatusLabel } from "@/lib/status";
+import { STATUSES, type StatusLabel } from "@/lib/status";
 import { ProgressBar, StatusIcon } from "./ui";
 
 function StatTile({ k, v, sub, icon, children }: { k: string; v: string | number; sub?: string; icon?: React.ReactNode; children?: React.ReactNode }) {
@@ -17,7 +17,7 @@ function StatTile({ k, v, sub, icon, children }: { k: string; v: string | number
 export function StatsBar({ workstreams, today }: { workstreams: Workstream[]; today: number }) {
   const items = allTasks(workstreams);
   const c = Object.fromEntries(STATUSES.map((s) => [s, 0])) as Record<StatusLabel, number>;
-  items.forEach(({ t }) => c[effStatus(t, today).status]++);
+  items.forEach(({ t }) => c[effOf(t, today).status]++);
   const pct = avg(items.map((x) => x.t.progress));
   return (
     <section className="stats" id="stats" aria-label="Overall progress summary">

@@ -17,7 +17,48 @@
           "status": "In progress",
           "isMilestone": false,
           "dependsOn": [],
-          "description": "**What:** Rebuilding sign-up and first-visit flows: phone-number login, insurance card scan, and a 3-question health profile instead of the current 14-field form.\n\n**Why:** 41% of new users drop off before booking their first consult. Usability sessions show the long form and unclear consent screens are the main causes.\n\n**Blockers:**\n- Legal sign-off on the new consent copy (expected this week)\n\n**Next steps:**\n- Finish build of insurance scan (OCR vendor integrated)\n- A/B test new flow with 20% of traffic from 26 Oct\n- Target: first-booking conversion from 59% to 70%"
+          "description": "**What:** Rebuilding sign-up and first-visit flows: phone-number login, insurance card scan, and a 3-question health profile instead of the current 14-field form.\n\n**Why:** 41% of new users drop off before booking their first consult. Usability sessions show the long form and unclear consent screens are the main causes.\n\n**Blockers:**\n- Legal sign-off on the new consent copy (expected this week)\n\n**Next steps:**\n- Finish build of insurance scan (OCR vendor integrated)\n- A/B test new flow with 20% of traffic from 26 Oct\n- Target: first-booking conversion from 59% to 70%",
+          "subtasks": [
+            {
+              "id": "p1-s1",
+              "parentId": "p1",
+              "name": "Insurance card scan (OCR)",
+              "owner": "Rohan Mehta",
+              "start": "2026-09-01",
+              "end": "2026-10-12",
+              "progress": 100,
+              "status": "Done",
+              "isMilestone": false,
+              "dependsOn": [],
+              "description": "OCR vendor integrated and live in the build."
+            },
+            {
+              "id": "p1-s2",
+              "parentId": "p1",
+              "name": "Consent copy sign-off",
+              "owner": "Ananya Rao",
+              "start": "2026-09-20",
+              "end": "2026-10-23",
+              "progress": 60,
+              "status": "At risk",
+              "isMilestone": false,
+              "dependsOn": [],
+              "description": "Waiting on legal."
+            },
+            {
+              "id": "p1-s3",
+              "parentId": "p1",
+              "name": "A/B test on 20% of traffic",
+              "owner": "Ananya Rao",
+              "start": "2026-10-26",
+              "end": "2026-10-30",
+              "progress": 65,
+              "status": "In progress",
+              "isMilestone": false,
+              "dependsOn": [],
+              "description": ""
+            }
+          ]
         },
         {
           "id": "p2",

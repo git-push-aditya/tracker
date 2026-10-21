@@ -23,7 +23,7 @@ export const DELETE = handle(async (req, ctx: RouteContext<"/api/workstreams/[id
   const session = await authorize(req, "workstream:delete");
   const { id } = await ctx.params;
   await prisma().$transaction(async (tx) => {
-    const ws = await tx.workstream.findUnique({ where: { id }, select: { id: true, tasks: { select: { id: true, name: true, owner: true, ownerId: true, workstreamId: true } } } });
+    const ws = await tx.workstream.findUnique({ where: { id }, select: { id: true, tasks: { select: { id: true, name: true, owner: true, ownerId: true, workstreamId: true, parentId: true } } } });
     if (!ws) throw new HttpError(404, "Workstream not found");
     await logTaskEvents(tx, "DELETED", session?.user.username ?? null, ws.tasks, "Workstream deleted");
     await tx.workstream.delete({ where: { id } }); // tasks + deps cascade

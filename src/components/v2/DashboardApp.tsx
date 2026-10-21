@@ -2,24 +2,26 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { useDashboard, useDeleteTask, useDeleteWorkstream, useImport, useSaveTask, useSaveWorkstream } from "@/hooks/useDashboard";
+import { useDashboard, useDeleteTask, useDeleteTaskKeepSubtasks, useDeleteWorkstream, useImport, usePromoteSubtask, useSaveSubtask, useSaveTask, useSaveWorkstream } from "@/hooks/useDashboard";
 import { ACTORS_KEY, useActors } from "@/hooks/v2/useActors";
 import { useMe } from "@/hooks/useMe";
 import { useTheme } from "@/hooks/useTheme";
 import { useToday } from "@/hooks/useToday";
 import { useUiState, type Ui } from "@/hooks/useUiState";
 import { allTasks, anyFilter, findTask, matches, NO_FILTERS, taskOwners, type Filters } from "@/lib/dashboard";
-import { buildTask, type TaskForm, type WorkstreamValues } from "@/lib/dashboard-ops";
-import { iso, parts } from "@/lib/date";
+import { parentChangeError, rollupProgress } from "@/lib/subtasks";
+import { buildTask, uid, type TaskForm, type WorkstreamValues } from "@/lib/dashboard-ops";
+import { fmt, iso, parts, toDay } from "@/lib/date";
 import { layoutGantt } from "@/lib/gantt-layout";
 import { normalizeImport } from "@/lib/import";
 import { can } from "@/lib/auth-rules";
 import { api } from "@/lib/api";
-import type { Workstream } from "@/lib/schemas";
+import type { Subtask, Task, Workstream } from "@/lib/schemas";
 import { onToast } from "@/lib/toast";
 import { AttentionList } from "./Attention";
 import { WorkstreamCard } from "./Details";
-import { TaskDialog, WorkstreamDialog } from "./Dialogs";
+import type { SubActions } from "./Subtasks";
+import { DeleteParentDialog, TaskDialog, type SubDraft, WorkstreamDialog } from "./Dialogs";
 import { Footer } from "./Footer";
 import { FilterBar, Gantt, GanttPanel, GanttScroll, GanttToolbar, Legend, Tooltip } from "./Gantt";
 import { History } from "./History";
@@ -31,7 +33,7 @@ import { Sidebar } from "./Sidebar";
 import { StatsBar } from "./StatsBar";
 import { DemoBanner, EmptyState, ErrorPanel, Toast } from "./ui";
 
-type Dlg = { kind: "task"; id: string | null; wsId?: string; n: number } | { kind: "ws"; id: string | null; n: number } | null;
+type Dlg = { kind: "task"; id: string | null; wsId?: string; parentId?: string; n: number } | { kind: "ws"; id: string | null; n: number } | { kind: "delete"; id: string; n: number } | null;
 
 const todayLabel = (today: number) => {
   const d = new Date(today * 86400000);
@@ -63,7 +65,7 @@ function Board({ source, workstreams, today, ui, setUi, theme, me, reset }: {
   source: "demo" | "db"; workstreams: Workstream[]; today: number; ui: Ui; setUi: (p: (u: Ui) => Partial<Ui>) => void;
   theme: ReturnType<typeof useTheme>; me: ReturnType<typeof useMe>; reset: () => Promise<void>;
 }) {
-  const saveTask = useSaveTask(), deleteTask = useDeleteTask(), saveWs = useSaveWorkstream(), deleteWs = useDeleteWorkstream(), importData = useImport();
+  const saveTask = useSaveTask(), saveSub = useSaveSubtask(), promoteSub = usePromoteSubtask(), deleteTask = useDeleteTask(), deleteKeep = useDeleteTaskKeepSubtasks(), saveWs = useSaveWorkstream(), deleteWs = useDeleteWorkstream(), importData = useImport();
   const demo = source === "demo";
   const qc = useQueryClient();
   const canEdit = can(me.permissions, "task:update");
@@ -107,7 +109,7 @@ function Board({ source, workstreams, today, ui, setUi, theme, me, reset }: {
   const requestToday = () => { toTodayRef.current = true; bump((n) => n + 1); };
 
   const layout = layoutGantt({
-    workstreams, zoom: ui.zoom, today, collapsed: ui.collapsed, wsFilter: filters.ws, anyFilter: anyFilter(filters),
+    workstreams, zoom: ui.zoom, today, collapsed: ui.collapsed, expanded: ui.expanded, wsFilter: filters.ws, anyFilter: anyFilter(filters),
     visible: (ws, t) => matches(filters, ws, t, today),
   });
 
@@ -161,8 +163,9 @@ function Board({ source, workstreams, today, ui, setUi, theme, me, reset }: {
     if (tip.show && tip.id === id) placeTip(); else setTip({ id, show: true });
   };
   const hideTip = () => setTip((t) => (t.show ? { ...t, show: false } : t));
+  const [full, setFull] = useState(false);
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && hideTip();
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { hideTip(); setFull(false); } };
     addEventListener("keydown", onKey);
     return () => removeEventListener("keydown", onKey);
   }, []);
@@ -174,25 +177,81 @@ function Board({ source, workstreams, today, ui, setUi, theme, me, reset }: {
     if (source === "db" && qc.isMutating() > 0) { toast("Saving… try again in a moment"); return true; }
     return false;
   };
-  const openTask = (id: string | null, wsId?: string) => {
+  const openTask = (id: string | null, wsId?: string, parentId?: string) => {
     if (busy()) return;
     if (!workstreams.length) { toast("Add a workstream first."); setDlg({ kind: "ws", id: null, n: ++seq.current }); return; }
-    setDlg({ kind: "task", id, wsId: wsId ?? (filters.ws || workstreams[0]?.id), n: ++seq.current });
+    setDlg({ kind: "task", id, wsId: wsId ?? (filters.ws || workstreams[0]?.id), parentId, n: ++seq.current });
+  };
+
+  /* ---------- subtasks ---------- */
+  // Saves a subtask. A due date after the parent's is refused by the server, so offer to extend the parent first.
+  async function persistSub(sub: Subtask, parent: Task, isNew: boolean) {
+    const pf = findTask(workstreams, parent.id);
+    if (sub.end > parent.end && pf) {
+      if (!confirm(`"${sub.name}" is due ${fmt(toDay(sub.end))}, after "${parent.name}" (${fmt(toDay(parent.end))}). Extend "${parent.name}" to ${fmt(toDay(sub.end))}?`)) return;
+      const task = { ...parent, end: sub.end, start: parent.isMilestone ? sub.end : parent.start };
+      try { await saveTask.mutateAsync({ task, wsId: pf.ws.id, isNew: false }); } catch { return; }
+    }
+    saveSub.mutateAsync({ sub: { ...sub, parentId: parent.id }, parentId: parent.id, isNew }).then(() => { refreshActors(); if (sub.status === "Done") refreshHistory(); }, () => {});
+  }
+  // inline edits use the cached updatedAt, so wait for an earlier save to settle rather than 409 on ourselves
+  const subActions: SubActions = {
+    save: (sub, patch, parent) => { if (!busy()) void persistSub({ ...sub, ...patch }, parent, false); },
+    remove: (sub, parent) => {
+      if (busy()) return;
+      if (!confirm(`Delete subtask "${sub.name}"? ${parent.name}'s progress will be recalculated.`)) return;
+      deleteTask.mutateAsync(sub.id).then(refreshHistory, () => {}); toast("Subtask deleted");
+    },
+    promote: (sub, parent) => {
+      if (busy()) return;
+      const rest = (parent.subtasks ?? []).filter((x) => x.id !== sub.id);
+      const effect = rest.length ? `${parent.name} progress changes from ${parent.progress}% to ${rollupProgress(rest)}%.` : `${parent.name} will have no subtasks left.`;
+      if (!confirm(`Move "${sub.name}" out of "${parent.name}" and make it a task? Its dates and details stay as they are. ${effect}`)) return;
+      promoteSub.mutateAsync(sub.id).then(() => { toast("Now a task"); if (view === "ws") scrollToTask(sub.id); }, () => {});
+    },
   };
   const openWs = (id: string | null) => !busy() && setDlg({ kind: "ws", id, n: ++seq.current });
 
-  function onSaveTask(f: TaskForm & { wsId: string }) {
+  function onSaveTask(f: TaskForm & { wsId: string; subs?: SubDraft[] }) {
     const r = buildTask(f);
     if ("error" in r) return r.error;
+    if (dlg?.kind === "task" && dlg.parentId && !dlgParent) return "That parent task no longer exists."; // deleted while this was open
+    if (dlgParent) { // a subtask: saved under its parent, whose workstream it shares
+      const sub: Subtask = { ...r.task, parentId: dlgParent.id, dependsOn: [] };
+      setDlg(null);
+      toast(f.id ? "Subtask updated" : "Subtask added");
+      void persistSub(sub, dlgParent, !f.id);
+      return;
+    }
+    if (editTask?.subtasks?.length) { // a parent: Done and the due date are limited by its subtasks
+      const err = parentChangeError(editTask.subtasks, { status: r.task.status, end: r.task.end });
+      if (err) return err;
+    }
+    const bad = (f.subs ?? []).find((x) => x.name.trim() && x.end && (x.end > r.task.end || x.end < r.task.start));
+    if (bad) return `"${bad.name.trim()}" must end between ${r.task.start} and ${r.task.end}.`;
     setDlg(null);
     toast(f.id ? "Task updated" : "Task added");
     // resolves to the final id (assigned by the server in db mode), after the refetch
-    saveTask.mutateAsync({ task: r.task, wsId: f.wsId, isNew: !f.id }).then((id) => { refreshActors(); if (f.status === "Done") refreshHistory(); if (view === "ws") scrollToTask(id, f.wsId); }, () => {});
+    const kids = (f.subs ?? []).filter((x) => x.name.trim());
+    saveTask.mutateAsync({ task: r.task, wsId: f.wsId, isNew: !f.id }).then(async (id) => {
+      // one at a time: each save re-reads the parent, so parallel saves would race on its rollup
+      for (const k of kids) {
+        const sub: Subtask = { id: uid("t"), name: k.name.trim(), owner: k.owner, start: r.task.start, end: k.end || r.task.end, progress: 0, status: "Not started", isMilestone: false, dependsOn: [], description: "", parentId: id };
+        try { await saveSub.mutateAsync({ sub, parentId: id, isNew: true }); } catch { break; }
+      }
+      refreshActors(); if (f.status === "Done") refreshHistory(); if (view === "ws") scrollToTask(id, f.wsId);
+    }, () => {});
   }
   function onDeleteTask(id: string) {
     const f = findTask(workstreams, id); if (!f) return;
+    if (f.t.subtasks?.length) return setDlg({ kind: "delete", id, n: ++seq.current }); // ask what happens to the subtasks
     if (!confirm(`Delete "${f.t.name}"? This can't be undone (unless you have an exported backup).`)) return;
     deleteTask.mutateAsync(id).then(refreshHistory, () => {}); setDlg(null); toast("Task deleted");
+  }
+  function onDeleteParent(id: string, keep: boolean) {
+    if (busy()) return;
+    (keep ? deleteKeep : deleteTask).mutateAsync(id).then(refreshHistory, () => {});
+    setDlg(null); toast(keep ? "Task deleted, subtasks kept" : "Task and subtasks deleted");
   }
   function onSaveWs(v: WorkstreamValues, id: string | null) {
     if (!v.name) return "Please give the workstream a name.";
@@ -244,9 +303,12 @@ function Board({ source, workstreams, today, ui, setUi, theme, me, reset }: {
     if ((el = hit("[data-scroll]"))) return scrollToTask(el.dataset.scroll!);
     if ((el = hit("[data-zoom]"))) { toTodayRef.current = true; return setUi(() => ({ zoom: el!.dataset.zoom as Ui["zoom"] })); }
     if ((el = hit("[data-add]"))) return openTask(null, el.dataset.add);
+    if ((el = hit("[data-add-sub]"))) return openTask(null, undefined, el.dataset.addSub);
+    if ((el = hit("[data-toggle-task]"))) return setUi((u) => ({ expanded: toggle(u.expanded, el!.dataset.toggleTask!) }));
     if ((el = hit("[data-edit-ws]"))) return openWs(el.dataset.editWs!);
     const id = hit("button[id]")?.id;
     if (id === "btnToday") return requestToday();
+    if (id === "btnFullGantt") return setFull((f) => !f);
     if (id === "btnCollapseGantt") {
       const all = workstreams.length > 0 && workstreams.every((w) => ui.collapsed.includes(w.id));
       return setUi(() => ({ collapsed: all ? [] : workstreams.map((w) => w.id) }));
@@ -263,7 +325,11 @@ function Board({ source, workstreams, today, ui, setUi, theme, me, reset }: {
 
   const tasks = allTasks(workstreams);
   const shown = tasks.filter(({ ws, t }) => matches(filters, ws, t, today)).length;
-  const editTask = dlg?.kind === "task" && dlg.id ? findTask(workstreams, dlg.id)?.t ?? null : null;
+  const delTask = dlg?.kind === "delete" ? findTask(workstreams, dlg.id)?.t : undefined;
+  const found = dlg?.kind === "task" && dlg.id ? findTask(workstreams, dlg.id) : null;
+  const editTask = found?.t ?? null;
+  // set when the dialog is for a subtask (new: from the "+ Add subtask" button; existing: found under its parent)
+  const dlgParent = dlg?.kind === "task" ? found?.parent ?? (dlg.parentId ? findTask(workstreams, dlg.parentId)?.t : undefined) ?? null : null;
   const editWs = dlg?.kind === "ws" && dlg.id ? workstreams.find((w) => w.id === dlg.id) ?? null : null;
 
   const curWs = view === "ws" ? workstreams.find((w) => w.id === wsId) : undefined;
@@ -284,8 +350,8 @@ function Board({ source, workstreams, today, ui, setUi, theme, me, reset }: {
             <>
               <Header todayLabel={todayLabel(today)} todayIso={iso(today)} canEdit={canEdit} />
               <StatsBar workstreams={workstreams} today={today} />
-              <GanttPanel>
-                <GanttToolbar zoom={ui.zoom} allCollapsed={workstreams.length > 0 && workstreams.every((w) => ui.collapsed.includes(w.id))} />
+              <GanttPanel full={full}>
+                <GanttToolbar full={full} zoom={ui.zoom} allCollapsed={workstreams.length > 0 && workstreams.every((w) => ui.collapsed.includes(w.id))} />
                 <FilterBar workstreams={workstreams} owners={owners} filters={filters} shown={shown} total={tasks.length}
                   onChange={(k, v) => setPicked({ ...filters, [k]: v })} />
                 <GanttScroll ref={scrollerRef}
@@ -301,7 +367,7 @@ function Board({ source, workstreams, today, ui, setUi, theme, me, reset }: {
             </>
           )}
           {view === "ws" && (curWs
-            ? <div className="ws-page"><WorkstreamCard ws={curWs} vis={curWs.tasks} all={workstreams} today={today} open canEdit={canEdit} /></div>
+            ? <div className="ws-page"><WorkstreamCard ws={curWs} vis={curWs.tasks} all={workstreams} today={today} open canEdit={canEdit} owners={people} subActions={subActions} /></div>
             : <EmptyState panel>Workstream not found.</EmptyState>)}
           {view === "history" && <History />}
           {view === "settings" && <Settings workstreams={workstreams} user={me.user} demo={demo} permissions={me.permissions} />}
@@ -311,8 +377,11 @@ function Board({ source, workstreams, today, ui, setUi, theme, me, reset }: {
       <Tooltip workstreams={workstreams} today={today} taskId={tip.id || undefined} show={tip.show} ref={tipRef} />
       <Toast message={toastMsg} show={toastShow} />
       {canEdit && dlg?.kind === "task" && (
-        <TaskDialog key={dlg.n} workstreams={workstreams} owners={people} task={editTask} wsId={dlg.wsId} today={today}
+        <TaskDialog key={dlg.n} workstreams={workstreams} owners={people} task={editTask} parent={dlgParent} wsId={dlg.wsId} today={today}
           onSave={onSaveTask} onDelete={() => dlg.id && onDeleteTask(dlg.id)} onClose={() => setDlg(null)} />
+      )}
+      {canEdit && dlg?.kind === "delete" && delTask && (
+        <DeleteParentDialog key={dlg.n} task={delTask} onDeleteAll={() => onDeleteParent(dlg.id, false)} onKeepSubtasks={() => onDeleteParent(dlg.id, true)} onClose={() => setDlg(null)} />
       )}
       {canEdit && dlg?.kind === "ws" && (
         <WorkstreamDialog key={dlg.n} workstreams={workstreams} owners={people} ws={editWs}

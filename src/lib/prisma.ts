@@ -12,7 +12,7 @@ export function prisma(): PrismaClient {
   return (g.prisma ??= new PrismaClient({
     adapter: new PrismaPg({
       connectionString: process.env.DATABASE_URL,
-      ssl: { rejectUnauthorized: false },
+      ssl: /@(localhost|127\.0\.0\.1)[:/]/.test(process.env.DATABASE_URL ?? "") ? false : { rejectUnauthorized: false }, // local dev Postgres has no TLS
       max: 5,
       idleTimeoutMillis: 300_000,
       connectionTimeoutMillis: 15_000,

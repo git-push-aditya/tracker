@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
+import { Maximize2, Minimize2 } from "lucide-react";
 import { fmt, fmtShort, toDay } from "@/lib/date";
-import { anyFilter, findTask, type Filters } from "@/lib/dashboard";
+import { anyFilter, effOf, findTask, type Filters } from "@/lib/dashboard";
 import type { Cell, GanttLayout, GroupRow, TaskRow, Zoom } from "@/lib/gantt-layout";
 import { plain } from "@/lib/md";
 import { wsVars } from "@/lib/palette";
@@ -14,7 +15,7 @@ import { Chevron, EmptyState, StatusBadge } from "./ui";
 const css = (v: Record<string, string | number>) => v as CSSProperties;
 
 /* ---------- toolbar + filters ---------- */
-export function GanttToolbar({ zoom, allCollapsed }: { zoom: Zoom; allCollapsed: boolean }) {
+export function GanttToolbar({ zoom, allCollapsed, full }: { zoom: Zoom; allCollapsed: boolean; full: boolean }) {
   return (
     <div className="panel-head">
       <h2 id="ganttTitle"><span className="live-dot" aria-hidden="true" />Live roadmap</h2>
@@ -26,6 +27,9 @@ export function GanttToolbar({ zoom, allCollapsed }: { zoom: Zoom; allCollapsed:
         </div>
         <Button variant="outline" size="sm" type="button" id="btnToday">Jump to today</Button>
         <Button variant="outline" size="sm" type="button" id="btnCollapseGantt">{allCollapsed ? "Expand all" : "Collapse all"}</Button>
+        <Button variant="outline" size="icon-sm" type="button" id="btnFullGantt" aria-label={full ? "Exit full view" : "Expand to full view"} title={full ? "Exit full view (Esc)" : "Full view"}>
+          {full ? <Minimize2 /> : <Maximize2 />}
+        </Button>
       </div>
     </div>
   );
@@ -178,16 +182,22 @@ export function MilestoneDiamond({ row }: { row: TaskRow }) {
 
 // canEdit → label opens the editor; view-only → label scrolls to the task's card
 export function GanttTaskRow({ row, W, canEdit }: { row: TaskRow; W: number; canEdit: boolean }) {
-  const { ws, t, es } = row;
+  const { ws, t, es, sub, subCount, expanded } = row;
   const label = canEdit
     ? { "data-edit": t.id, title: `Edit "${t.name}"`, "aria-label": `Edit task ${t.name}` }
     : { "data-scroll": t.id, title: `Show details for "${t.name}"`, "aria-label": `Show details for ${t.name}` };
   return (
-    <div className="g-row c-ws" style={wsVars(ws.color)}>
+    <div className={`g-row c-ws${sub ? " is-sub" : ""}`} style={wsVars(ws.color)}>
       <div className="g-label">
+        {subCount > 0 && (
+          <button type="button" className="g-sub-toggle" data-toggle-task={t.id} aria-expanded={expanded}
+            aria-label={`${expanded ? "Hide" : "Show"} ${subCount} subtask${subCount === 1 ? "" : "s"} of ${t.name}`}>
+            <Chevron />
+          </button>
+        )}
         <button type="button" className="g-task-btn" {...label}>
           <span className="nm">{t.isMilestone && <span className="ms-mark" aria-hidden="true">◆ </span>}{t.name}</span>
-          <span className="sub"><StatusBadge status={es.status} /><span className="owner">{t.owner}</span></span>
+          <span className="sub"><StatusBadge status={es.status} /><span className="owner">{t.owner}</span>{subCount > 0 && <span className="sub-count">{subCount} subtask{subCount === 1 ? "" : "s"}</span>}</span>
         </button>
       </div>
       <div className="g-track" style={{ width: W }}>
@@ -241,12 +251,13 @@ export function Tooltip({ workstreams, taskId, today, show, ref }: {
 }) {
   const f = taskId ? findTask(workstreams, taskId) : null;
   if (!f) return <div className="tip" id="tip" role="tooltip" ref={ref} />;
-  const { ws, t } = f;
-  const s = toDay(t.start), e = toDay(t.end), es = effStatus(t, today);
+  const { ws, t, parent } = f;
+  const s = toDay(t.start), e = toDay(t.end), es = parent ? effStatus(t, today) : effOf(t, today);
   const deps = t.dependsOn.map((d) => findTask(workstreams, d)).filter(Boolean).map((d) => d!.t.name).join(", ");
   return (
     <div className={`tip${show ? " show" : ""}`} id="tip" role="tooltip" ref={ref}>
       <h4>{t.isMilestone ? "◆ " : ""}{t.name}</h4>
+      {parent && <div className="ws">Subtask of {parent.name}</div>}
       <div className="ws"><span className="swatch c-ws" style={wsVars(ws.color)} />{ws.name}</div>
       <dl>
         <dt>Owner</dt><dd>{t.owner || "—"}</dd>
@@ -262,8 +273,8 @@ export function Tooltip({ workstreams, taskId, today, show, ref }: {
   );
 }
 
-export function GanttPanel({ children }: { children: React.ReactNode }) {
-  return <section className="panel" aria-labelledby="ganttTitle">{children}</section>;
+export function GanttPanel({ children, full }: { children: React.ReactNode; full: boolean }) {
+  return <section className={full ? "panel gantt-full" : "panel"} aria-labelledby="ganttTitle">{children}</section>;
 }
 
 export function GanttScroll({ children, ...rest }: React.ComponentProps<"div">) {

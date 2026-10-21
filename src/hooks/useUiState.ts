@@ -3,7 +3,7 @@ import { useCallback, useMemo } from "react";
 import { ZOOM_PX, type Zoom } from "@/lib/gantt-layout";
 import { lsStore, useIsClient, useLsValue } from "./storage";
 
-export type Ui = { zoom: Zoom; collapsed: string[]; openCards: string[] }; // detail cards start collapsed, so we remember the open ones
+export type Ui = { zoom: Zoom; collapsed: string[]; openCards: string[]; expanded: string[] }; // expanded: parent tasks whose subtasks show in the gantt // detail cards start collapsed, so we remember the open ones
 const store = lsStore("primecare.ui.v1"); // same key as refer.html
 
 function parse(raw: string | null): Ui {
@@ -13,6 +13,7 @@ function parse(raw: string | null): Ui {
     zoom: s.zoom && s.zoom in ZOOM_PX ? s.zoom : "month",
     collapsed: Array.isArray(s.collapsed) ? s.collapsed : [],
     openCards: Array.isArray(s.openCards) ? s.openCards : [],
+    expanded: Array.isArray(s.expanded) ? s.expanded : [],
   };
 }
 

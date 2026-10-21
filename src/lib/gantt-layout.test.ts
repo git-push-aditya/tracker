@@ -18,10 +18,10 @@ test("header tiers per zoom", () => {
   assert.equal(m.bot.at(-1)!.e, end); // last week cell clipped to the range
 });
 
-test("time range pads the data and includes today", () => {
-  const r = timeRange([{ start: "2026-09-10", end: "2026-10-20" }], d("2027-02-02"), "month");
-  assert.equal(r.start, d("2026-09-01"));
-  assert.equal(r.end, d("2027-04-01")); // month containing (last day + 30), plus one month
+test("time range spans whole calendar years around the data and today", () => {
+  const r = timeRange([{ start: "2026-09-10", end: "2026-10-20" }], d("2027-02-02"));
+  assert.equal(r.start, d("2025-01-01")); // 1 year before the earliest year (2026)
+  assert.equal(r.end, d("2029-01-01")); // 2 years past the latest year (2027)
 });
 
 test("arrow path: both shapes", () => {

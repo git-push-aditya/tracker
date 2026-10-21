@@ -9,7 +9,7 @@ import { WorkstreamIcon } from "@/components/icon";
 import { cn } from "@/lib/v2-utils";
 import { wsVars } from "@/lib/palette";
 import type { Workstream } from "@/lib/schemas";
-import { Logo } from "./ui";
+import { Flower, Logo } from "./ui";
 import { Popover, PopoverAnchor, PopoverContent } from "./ui/popover";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
 import {
@@ -39,7 +39,8 @@ export function Sidebar({ workstreams, path, user, themeLabel, canCreate, onLogo
     <Shell collapsible="icon" variant="inset">
       <SidebarHeader className="gap-3 px-3 pt-4">
         <div className="flex items-center justify-center px-1">
-          <Logo height={44} />
+          <span className="group-data-[collapsible=icon]:hidden"><Logo height={44} /></span>
+          <span className="hidden group-data-[collapsible=icon]:block"><Flower size={28} /></span>
         </div>
         <Popover open={q.trim() !== ""}>
           <PopoverAnchor asChild>

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildTask, removeTask, removeWorkstream, upsertTask, upsertWorkstream } from "./dashboard-ops";
+import { buildTask, promoteSubtask, removeTask, removeWorkstream, upsertSubtask, upsertTask, upsertWorkstream } from "./dashboard-ops";
 import type { Task, Workstream } from "./schemas";
 
 const t = (id: string, dependsOn: string[] = []): Task =>
@@ -41,4 +41,37 @@ test("upsertWorkstream", () => {
   const added = upsertWorkstream([ws("a", [])], v);
   assert.ok(added.length === 2 && added[1].tasks.length === 0 && added[1].id.startsWith("ws"));
   assert.equal(upsertWorkstream(added, { ...v, name: "z" }, "a")[0].name, "z");
+});
+
+const sub = (id: string, progress: number, status: Task["status"] = "In progress", start = "2026-01-02", end = "2026-01-02"): Task =>
+  ({ ...t(id), parentId: "p", progress, status, start, end });
+const family = () => [ws("a", [{ ...t("p"), status: "Done", progress: 100, subtasks: [sub("s1", 100, "Done"), sub("s2", 50, "In progress", "2026-01-05", "2026-01-06")] }, t("z")])];
+
+test("subtask ops keep the parent's rollup, status and subtasks in step", () => {
+  // adding an unfinished subtask reopens a Done parent and re-averages
+  const added = upsertSubtask(family(), "p", sub("s3", 0, "Not started"));
+  const p = added[0].tasks[0];
+  assert.deepEqual([p.status, p.progress, p.subtasks?.length], ["In progress", 50, 3]);
+  // editing the parent's own fields keeps its subtasks (the form doesn't carry them)
+  const edited = upsertTask(family(), { ...t("p"), name: "renamed", progress: 10 }, "a");
+  assert.deepEqual([edited[0].tasks[0].name, edited[0].tasks[0].subtasks?.length, edited[0].tasks[0].progress], ["renamed", 2, 75]);
+  // deleting a subtask re-averages; deleting the parent takes the subtasks with it
+  assert.equal(removeTask(family(), "s2")[0].tasks[0].progress, 100);
+  assert.deepEqual(removeTask(family(), "p")[0].tasks.map((x) => x.id), ["z"]);
+});
+
+test("promoteSubtask keeps dates and lands in start/end order", () => {
+  const out = promoteSubtask(family(), "s2")[0].tasks;
+  assert.deepEqual(out.map((x) => x.id), ["p", "z", "s2"]); // s2 starts after both, so it goes last
+  const moved = out.find((x) => x.id === "s2")!;
+  assert.deepEqual([moved.start, moved.end, moved.parentId, moved.progress], ["2026-01-05", "2026-01-06", null, 50]);
+  assert.equal(out.find((x) => x.id === "p")!.progress, 100); // parent re-averaged over what is left
+});
+
+test("removeTask can keep a deleted parent's subtasks as standalone tasks", () => {
+  const out = removeTask(family(), "p", true)[0].tasks;
+  assert.deepEqual(out.map((x) => x.id), ["z", "s1", "s2"]); // slotted by start/end; "p" is gone
+  assert.deepEqual(out.map((x) => x.parentId ?? null), [null, null, null]);
+  const s2 = out.find((x) => x.id === "s2")!;
+  assert.deepEqual([s2.start, s2.end, s2.progress, s2.status], ["2026-01-05", "2026-01-06", 50, "In progress"]);
 });
