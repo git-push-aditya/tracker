@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { TaskInput } from "@/lib/schemas";
 import { statusToDb } from "@/lib/status";
 import { reopensParent, subtaskChangeError } from "@/lib/subtasks";
-import { lockParent, syncParentProgress } from "@/lib/subtasks-db";
+import { lockParent, reopenAncestors, syncAncestors } from "@/lib/subtasks-db";
 import { ownerColumns } from "@/lib/actors";
 import { logTaskEvents } from "@/lib/task-events";
 import { assertDepsExist } from "@/lib/task-deps";
@@ -17,11 +17,12 @@ export const POST = handle(async (req) => {
   const task = await prisma().$transaction(async (tx) => {
     if (parentId) {
       if (deps.length) throw new HttpError(400, "A subtask can't have dependencies");
-      const parent = await lockParent(tx, parentId);
+      const parent = await lockParent(tx, parentId, { adding: true });
       const err = subtaskChangeError(parent, { end });
       if (err) throw new HttpError(400, err);
       rest.workstreamId = parent.workstreamId; // a subtask lives in its parent's workstream
-      if (reopensParent(parent.status, status)) await tx.task.update({ where: { id: parentId }, data: { status: "IN_PROGRESS" } });
+      // only a Done parent can have Done ancestors (R2), so this check is enough to reopen the whole chain
+      if (reopensParent(parent.status, status)) await reopenAncestors(tx, parentId);
     }
     if (!(await tx.workstream.findUnique({ where: { id: rest.workstreamId }, select: { id: true } })))
       throw new HttpError(400, "Unknown workstream");
@@ -42,7 +43,7 @@ export const POST = handle(async (req) => {
       include: taskInclude,
     });
     if (created.status === "DONE") await logTaskEvents(tx, "COMPLETED", session?.user.username ?? null, [created]);
-    await syncParentProgress(tx, parentId ?? null);
+    await syncAncestors(tx, parentId ?? null);
     return created;
   });
   return Response.json(toTask(task), { status: 201 });
