@@ -1,4 +1,5 @@
 import type { Workstream } from "./schemas";
+import { descendants } from "./subtasks";
 
 export const FIELDS = ["name", "description", "workstream", "owner"] as const;
 export type Field = (typeof FIELDS)[number];
@@ -9,7 +10,7 @@ export function searchTasks(workstreams: Workstream[], query: string, limit = 20
   const q = query.trim().toLowerCase();
   if (!q) return [];
   const hits = workstreams.flatMap((ws) =>
-    ws.tasks.flatMap((p) => [p, ...(p.subtasks ?? [])]).flatMap((t) => { // subtasks are searchable too
+    ws.tasks.flatMap((p) => [p, ...descendants(p)]).flatMap((t) => { // subtasks at every level are searchable too
       const text: Record<Field, string> = { name: t.name, description: t.description, workstream: ws.name, owner: t.owner };
       const field = FIELDS.find((f) => text[f].toLowerCase().includes(q));
       return field ? [{ ws, t, field }] : [];

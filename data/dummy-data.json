@@ -43,7 +43,35 @@
               "status": "At risk",
               "isMilestone": false,
               "dependsOn": [],
-              "description": "Waiting on legal."
+              "description": "Waiting on legal.",
+              "subtasks": [
+                {
+                  "id": "p1-s2a",
+                  "parentId": "p1-s2",
+                  "name": "Draft revised consent copy",
+                  "owner": "Ananya Rao",
+                  "start": "2026-09-20",
+                  "end": "2026-10-05",
+                  "progress": 100,
+                  "status": "Done",
+                  "isMilestone": false,
+                  "dependsOn": [],
+                  "description": "Plain-language rewrite of the three consent screens."
+                },
+                {
+                  "id": "p1-s2b",
+                  "parentId": "p1-s2",
+                  "name": "Legal review",
+                  "owner": "Meera Iyer",
+                  "start": "2026-10-06",
+                  "end": "2026-10-23",
+                  "progress": 20,
+                  "status": "At risk",
+                  "isMilestone": false,
+                  "dependsOn": [],
+                  "description": "Expected this week."
+                }
+              ]
             },
             {
               "id": "p1-s3",

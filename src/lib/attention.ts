@@ -1,15 +1,19 @@
 import { toDay } from "./date";
 import { allTasks, effOf } from "./dashboard";
-import type { Workstream } from "./schemas";
-import { effStatus, type StatusLabel } from "./status";
+import type { Task, Workstream } from "./schemas";
+import type { StatusLabel } from "./status";
 
 const s = (n: number) => (n === 1 ? "" : "s");
 
+// Every task at any depth; `parent` is the path above it ("Parent › Subtask"), undefined for a top-level task.
+const withPath = (t: Task, path: string[]): { t: Task; parent?: string }[] =>
+  [{ t, parent: path.length ? path.join(" › ") : undefined }, ...(t.subtasks ?? []).flatMap((x) => withPath(x, [...path, t.name]))];
+
 // A task shows when its (effective) status is ticked, OR (if days > 0) it is not done and due within `days` days.
 export function attentionRows(workstreams: Workstream[], today: number, statuses: StatusLabel[], days: number) {
-  const items = allTasks(workstreams).flatMap(({ ws, t }) => [{ ws, t, parent: undefined as string | undefined }, ...(t.subtasks ?? []).map((x) => ({ ws, t: x, parent: t.name }))]);
+  const items = allTasks(workstreams).flatMap(({ ws, t }) => withPath(t, []).map((x) => ({ ws, ...x })));
   return items.flatMap(({ ws, t, parent }) => {
-    const { status } = parent ? effStatus(t, today) : effOf(t, today);
+    const { status } = effOf(t, today);
     const left = toDay(t.end) - today;
     const byStatus = statuses.includes(status), soon = days > 0 && status !== "Done" && left >= 0 && left <= days;
     if (!byStatus && !soon) return [];

@@ -21,16 +21,39 @@ test("normalizeImport subtasks: nested, repaired to the subtask rules", () => {
   const { workstreams } = normalizeImport({
     workstreams: [{ id: "w", tasks: [
       { id: "p", start: "2026-03-01", end: "2026-03-05", status: "Done", progress: 100, dependsOn: ["s1"], subtasks: [
-        { id: "s1", start: "2026-03-01", end: "2026-03-09", status: "Done", dependsOn: ["p"], subtasks: [{ id: "deep" }] },
+        { id: "s1", start: "2026-03-01", end: "2026-03-09", status: "Done", dependsOn: ["p"], subtasks: [
+          { id: "deep", start: "2026-03-01", end: "2026-03-12", status: "Done", subtasks: [{ id: "tooDeep" }] },
+        ] },
         { id: "s2", start: "2026-03-02", end: "2026-03-04", status: "In progress", progress: 50, owner: "Ben" },
       ] },
       { id: "q", subtasks: [] },
     ] }],
   });
   const [p, q] = workstreams[0].tasks;
-  assert.deepEqual([p.end, p.status, p.progress], ["2026-03-09", "In progress", 75]); // ends with its latest subtask, reopened, averaged
+  assert.deepEqual([p.end, p.status, p.progress], ["2026-03-12", "In progress", 75]); // ends with its latest (repaired) subtask, reopened, averaged
   assert.deepEqual(p.dependsOn, []); // can't depend on a subtask
-  assert.deepEqual(p.subtasks?.map((s) => [s.id, s.parentId, s.dependsOn.length]), [["s1", "p", 0], ["s2", "p", 0]]); // "deep" dropped
+  assert.deepEqual(p.subtasks?.map((s) => [s.id, s.parentId, s.dependsOn.length]), [["s1", "p", 0], ["s2", "p", 0]]);
+  const s1 = p.subtasks![0];
+  assert.deepEqual([s1.end, s1.status], ["2026-03-12", "Done"]); // extended to its own subtask's end
+  assert.deepEqual(s1.subtasks?.map((s) => [s.id, s.parentId, s.subtasks]), [["deep", "s1", undefined]]); // depth 2 kept, "tooDeep" dropped
   assert.equal(q.subtasks, undefined);
   assert.throws(() => normalizeImport({ workstreams: [{ id: "w", tasks: [{ id: "a", subtasks: [{ id: "a" }] }] }] }), /Duplicate/);
+  assert.throws(() => normalizeImport({ workstreams: [{ id: "w", tasks: [{ id: "a", subtasks: [{ id: "b", subtasks: [{ id: "a" }] }] }] }] }), /Duplicate/);
+});
+
+test("normalizeImport repairs the middle level and rolls progress up two levels", () => {
+  const { workstreams } = normalizeImport({
+    workstreams: [{ id: "w", tasks: [
+      { id: "p", start: "2026-03-01", end: "2026-03-31", status: "Done", subtasks: [
+        { id: "m", start: "2026-03-01", end: "2026-03-20", status: "Done", subtasks: [
+          { id: "x", end: "2026-03-10", start: "2026-03-01", status: "Done" },
+          { id: "y", end: "2026-03-10", start: "2026-03-01", status: "In progress", progress: 0 },
+        ] },
+        { id: "n", start: "2026-03-01", end: "2026-03-05", status: "Done" },
+      ] },
+    ] }],
+  });
+  const p = workstreams[0].tasks[0], m = p.subtasks![0];
+  assert.deepEqual([m.status, m.progress], ["In progress", 50]); // open child reopens the middle level
+  assert.deepEqual([p.status, p.progress], ["In progress", 75]); // avg(m 50, n 100), and reopened in turn
 });
