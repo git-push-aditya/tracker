@@ -1,8 +1,18 @@
 import { avg } from "./dashboard";
 import type { StatusLabel } from "./status";
 
-// Pure subtask rules (see docs/subtasks-implementation.md). Dates are ISO strings, which compare correctly as text.
+// Pure subtask rules (see docs/subtasks-implementation.md, docs/nested-subtasks-implementation.md).
+// Dates are ISO strings, which compare correctly as text. Every rule holds between a node and its direct parent.
 type Sub = { status: StatusLabel; progress: number; end: string };
+
+/** How many levels of subtasks a top-level task can have (top-level task = depth 0, its deepest subtask = MAX_DEPTH). */
+export const MAX_DEPTH = 10;
+
+/** R8: a node at `depth` (top-level 0) can take children while they stay within MAX_DEPTH. */
+export const canHaveChildren = (depth: number) => depth < MAX_DEPTH;
+
+/** Every node below `t`, each followed by its own descendants. */
+export const descendants = <T extends { subtasks?: T[] }>(t: T): T[] => (t.subtasks ?? []).flatMap((s) => [s, ...descendants(s)]);
 
 /** R1: a parent's progress is the rounded average of its subtasks'. */
 export const rollupProgress = (subs: Pick<Sub, "progress">[]) => avg(subs.map((s) => s.progress));
@@ -30,6 +40,10 @@ export function promoteSlot(top: { position: number; start: string; end: string 
   return later ? later.position : (sorted.at(-1)?.position ?? -1) + 1;
 }
 
-/** R1 on read: a parent with subtasks shows their average, whatever progress is stored. */
-export const withRollup = <T extends { progress: number; subtasks?: { progress: number }[] }>(t: T): T =>
-  t.subtasks?.length ? { ...t, progress: rollupProgress(t.subtasks) } : t;
+/** R1 on read, at every level: a node with subtasks shows the average of its (rolled-up) children, whatever is stored. */
+type Rollable = { progress: number; subtasks?: Rollable[] };
+export function withRollup<T extends Rollable>(t: T): T {
+  if (!t.subtasks?.length) return t;
+  const subtasks = t.subtasks.map(withRollup);
+  return { ...t, subtasks, progress: rollupProgress(subtasks) } as T;
+}

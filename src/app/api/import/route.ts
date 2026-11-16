@@ -19,35 +19,39 @@ export const POST = handle(async (req) => {
     }
   })();
 
+  // every task at every depth, with its parent and its position among its siblings
+  type T = (typeof workstreams)[number]["tasks"][number];
+  type Flat = { w: (typeof workstreams)[number]; t: T; position: number; parentId: string | null; depth: number };
+  const walk = (w: Flat["w"], list: T[], parentId: string | null, depth: number): Flat[] =>
+    list.flatMap((t, position) => [{ w, t, position, parentId, depth }, ...walk(w, t.subtasks ?? [], t.id, depth + 1)]);
+  const flat = workstreams.flatMap((w) => walk(w, w.tasks, null, 0));
+
   await prisma().$transaction(
     async (tx) => {
       // tasks that the import doesn't bring back count as deleted (a re-import of an export keeps its ids, so those don't)
-      const keep = new Set(workstreams.flatMap((w) => w.tasks.flatMap((t) => [t.id, ...(t.subtasks ?? []).map((x) => x.id)])));
+      const keep = new Set(flat.map((f) => f.t.id));
       const old = await tx.task.findMany({ select: { id: true, name: true, owner: true, ownerId: true, workstreamId: true, parentId: true } });
       await logTaskEvents(tx, "DELETED", session?.user.username ?? null, old.filter((t) => !keep.has(t.id)), "Removed by import");
       await tx.workstream.deleteMany(); // cascades tasks and dependencies
       // owners in the file become actors (find-or-create), so an import can't reintroduce duplicate spellings
-      const people = await resolveMany(tx, workstreams.flatMap((w) => [w.owner, ...w.tasks.flatMap((t) => [t.owner, ...(t.subtasks ?? []).map((x) => x.owner)])]));
+      const people = await resolveMany(tx, [...workstreams.map((w) => w.owner), ...flat.map((f) => f.t.owner)]);
       const who = (name: string) => { const a = people.get(actorKey(name)); return { owner: a?.name ?? "", ownerId: a?.id ?? null }; };
       await tx.workstream.createMany({
         data: workstreams.map((w, position) => ({ id: w.id, name: w.name, color: w.color, ...who(w.owner), goal: w.goal, position })),
       });
-      const tasks = workstreams.flatMap((w) => w.tasks.map((t, position) => ({ w, t, position })));
-      const row = (w: { id: string }, t: (typeof tasks)[number]["t"], position: number, parentId: string | null) => ({
+      const row = ({ w, t, position, parentId }: Flat) => ({
         id: t.id, workstreamId: w.id, parentId, name: t.name, ...who(t.owner),
         start: new Date(t.start), end: new Date(t.end), progress: t.progress,
         status: statusToDb(t.status), isMilestone: t.isMilestone, description: t.description, position,
       });
-      await tx.task.createMany({ data: tasks.map(({ w, t, position }) => row(w, t, position, null)) });
-      // subtasks after their parents exist (the FK)
-      await tx.task.createMany({
-        data: tasks.flatMap(({ w, t }) => (t.subtasks ?? []).map((x, i) => row(w, x, i, t.id))),
-      });
+      // one level at a time, so each subtask's parent already exists (the FK)
+      for (let depth = 0; flat.some((f) => f.depth === depth); depth++)
+        await tx.task.createMany({ data: flat.filter((f) => f.depth === depth).map(row) });
       await tx.taskDependency.createMany({
-        data: tasks.flatMap(({ t }) => t.dependsOn.map((dependsOnId) => ({ taskId: t.id, dependsOnId }))),
+        data: flat.flatMap(({ t }) => t.dependsOn.map((dependsOnId) => ({ taskId: t.id, dependsOnId }))),
       });
     },
     { timeout: 20000 },
   );
-  return Response.json({ ok: true, workstreams: workstreams.length, tasks: workstreams.reduce((n, w) => n + w.tasks.reduce((m, t) => m + 1 + (t.subtasks?.length ?? 0), 0), 0) });
+  return Response.json({ ok: true, workstreams: workstreams.length, tasks: flat.length });
 });

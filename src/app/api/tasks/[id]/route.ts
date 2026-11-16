@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { TaskUpdate } from "@/lib/schemas";
 import { statusToDb } from "@/lib/status";
 import { parentChangeError, reopensParent, rollupProgress, subtaskChangeError } from "@/lib/subtasks";
-import { detachSubtask, lockParent, lockTask, subtasksOf, syncParentProgress } from "@/lib/subtasks-db";
+import { descendantIds, lockParent, lockTask, moveUp, reopenAncestors, subtasksOf, syncAncestors } from "@/lib/subtasks-db";
 import { ownerColumns } from "@/lib/actors";
 import { logTaskEvents } from "@/lib/task-events";
 import { assertDepsExist } from "@/lib/task-deps";
@@ -21,7 +21,8 @@ export const PUT = handle(async (req, ctx: RouteContext<"/api/tasks/[id]">) => {
     const current = await tx.task.findUnique({ where: { id }, select: { workstreamId: true, status: true, parentId: true } });
     if (!current) throw new HttpError(404, "Task not found");
 
-    // subtask rules (parent is locked before the child, always)
+    // subtask rules (ancestors are locked before the child, always). A mid-level task gets both checks below:
+    // as a child against its parent, and as a parent against its own subtasks.
     let progress = rest.progress;
     if (current.parentId) {
       if (rest.workstreamId !== current.workstreamId) throw new HttpError(400, "Move the parent task instead");
@@ -29,7 +30,7 @@ export const PUT = handle(async (req, ctx: RouteContext<"/api/tasks/[id]">) => {
       const parent = await lockParent(tx, current.parentId);
       const err = subtaskChangeError(parent, { end });
       if (err) throw new HttpError(400, err);
-      if (reopensParent(parent.status, status)) await tx.task.update({ where: { id: parent.id }, data: { status: "IN_PROGRESS" } });
+      if (reopensParent(parent.status, status)) await reopenAncestors(tx, parent.id);
     }
     await lockTask(tx, id);
     const subs = await subtasksOf(tx, id);
@@ -59,8 +60,8 @@ export const PUT = handle(async (req, ctx: RouteContext<"/api/tasks/[id]">) => {
     });
     if (!count) throw new HttpError(409, "Changed by someone else — reload to see their version");
 
-    if (moved && subs.length) await tx.task.updateMany({ where: { parentId: id }, data: { workstreamId: rest.workstreamId } });
-    await syncParentProgress(tx, current.parentId);
+    if (moved && subs.length) await tx.task.updateMany({ where: { id: { in: await descendantIds(tx, id) } }, data: { workstreamId: rest.workstreamId } });
+    await syncAncestors(tx, current.parentId);
     await tx.taskDependency.deleteMany({ where: { taskId: id } });
     await tx.taskDependency.createMany({ data: deps.map((dependsOnId) => ({ taskId: id, dependsOnId })) });
     const updated = await tx.task.findUniqueOrThrow({ where: { id }, include: taskInclude });
@@ -70,8 +71,9 @@ export const PUT = handle(async (req, ctx: RouteContext<"/api/tasks/[id]">) => {
   return Response.json(toTask(task));
 });
 
-// DELETE /api/tasks/:id[?subtasks=keep]  A parent's subtasks are deleted with it, or with ?subtasks=keep they become
-// standalone tasks (dates and details unchanged, slotted by date) before the parent goes.
+// DELETE /api/tasks/:id[?subtasks=keep]  A parent's subtasks (all levels) are deleted with it, or with ?subtasks=keep
+// its direct subtasks move up one level, taking their own subtasks along: under a top-level task they become
+// standalone tasks (dates and details unchanged, slotted by date), deeper they join the grandparent.
 export const DELETE = handle(async (req, ctx: RouteContext<"/api/tasks/[id]">) => {
   const session = await authorize(req, "task:delete");
   const { id } = await ctx.params;
@@ -82,16 +84,18 @@ export const DELETE = handle(async (req, ctx: RouteContext<"/api/tasks/[id]">) =
     if (!task) throw new HttpError(404, "Task not found");
     if (task.parentId) await lockParent(tx, task.parentId);
     await lockTask(tx, id);
-    const subs = await tx.task.findMany({ where: { parentId: id }, select: snap, orderBy: [{ start: "asc" }, { end: "asc" }, { position: "asc" }] });
+    const order = [{ start: "asc" }, { end: "asc" }, { position: "asc" }] as const;
+    const subs = await tx.task.findMany({ where: { parentId: id }, select: snap, orderBy: [...order] });
     const actor = session?.user.username ?? null;
     if (keep && subs.length) {
-      await logTaskEvents(tx, "DELETED", actor, [task], "Subtasks kept as tasks");
-      for (const s of subs) await detachSubtask(tx, s.id, { skip: id });
+      await logTaskEvents(tx, "DELETED", actor, [task], task.parentId ? "Subtasks moved up a level" : "Subtasks kept as tasks");
+      for (const s of subs) await moveUp(tx, s.id, { skip: id });
     } else {
-      await logTaskEvents(tx, "DELETED", actor, [task, ...subs.map((s) => ({ ...s, note: "deleted with its parent" }))]);
+      const all = await tx.task.findMany({ where: { id: { in: await descendantIds(tx, id) } }, select: snap, orderBy: [...order] });
+      await logTaskEvents(tx, "DELETED", actor, [task, ...all.map((s) => ({ ...s, note: "deleted with its parent" }))]);
     }
-    await tx.task.delete({ where: { id } }); // deps cascade; subtasks too unless detached above
-    await syncParentProgress(tx, task.parentId);
+    await tx.task.delete({ where: { id } }); // deps cascade; subtasks (all levels) too unless moved up above
+    await syncAncestors(tx, task.parentId);
   });
   return Response.json({ ok: true });
 });

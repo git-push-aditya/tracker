@@ -25,9 +25,11 @@ const TaskCore = z.object({
   description: z.string(),
   updatedAt: z.string().optional(), // DB mode only
 });
-export const SubtaskShape = TaskCore;
-// A subtask is a TaskCore with a parentId. One level only, so subtasks carry no subtasks of their own.
-export const TaskShape = TaskCore.extend({ subtasks: z.array(SubtaskShape).optional() }); // absent = none
+// Any task can carry subtasks (absent = none); a subtask is a task with a parentId. Depth is limited by MAX_DEPTH
+// in subtasks.ts, enforced by the API and import, not by this shape.
+type TaskNode = z.infer<typeof TaskCore> & { subtasks?: TaskNode[] };
+export const TaskShape: z.ZodType<TaskNode> = TaskCore.extend({ subtasks: z.lazy(() => z.array(TaskShape)).optional() });
+export const SubtaskShape = TaskShape;
 
 export const WorkstreamShape = z.object({
   id: z.string(),

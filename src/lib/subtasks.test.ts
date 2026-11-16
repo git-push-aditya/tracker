@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { effStatus } from "./status";
 import { toDay } from "./date";
-import { parentChangeError, promoteSlot, reopensParent, rollupProgress, subtaskChangeError } from "./subtasks";
+import { canHaveChildren, descendants, MAX_DEPTH, parentChangeError, promoteSlot, reopensParent, rollupProgress, subtaskChangeError, withRollup } from "./subtasks";
 
 const sub = (status: "Done" | "In progress" | "Delayed", progress: number, end = "2026-03-01") => ({ status, progress, end });
 
@@ -53,4 +53,39 @@ test("promote slot keeps start/end order", () => {
   assert.equal(promoteSlot(top, { start: "2026-02-01", end: "2026-02-15" }), 2); // same start, earlier end than #2
   assert.equal(promoteSlot(top, { start: "2026-03-01", end: "2026-03-02" }), 3); // after everything
   assert.equal(promoteSlot([], { start: "2026-03-01", end: "2026-03-02" }), 0);
+});
+
+// ---- nested subtasks (docs/nested-subtasks-implementation.md) ----
+type N = { id: string; progress: number; subtasks?: N[] };
+const node = (id: string, progress: number, subtasks?: N[]): N => ({ id, progress, subtasks });
+
+test("R1 rollup averages direct children, each rolled up first", () => {
+  // B = avg(100, 0, 0) = 33; top = avg(B 33, C 80) = 57 (not the leaf average of 100,0,0,80 = 45)
+  const t = withRollup(node("A", 5, [node("B", 99, [node("B1", 100), node("B2", 0), node("B3", 0)]), node("C", 80)]));
+  assert.equal(t.subtasks![0].progress, 33);
+  assert.equal(t.progress, 57);
+  assert.equal(withRollup(node("X", 42)).progress, 42); // no subtasks: stored value kept (R7)
+  assert.equal(withRollup(node("Y", 42, [])).progress, 42);
+});
+
+test("R5 Delayed propagates from two levels down", () => {
+  const today = toDay("2026-03-05");
+  const late = { status: "In progress" as const, end: "2026-03-01" };
+  const mid = { status: "In progress" as const, end: "2026-03-30", subtasks: [late] };
+  const top = { status: "In progress" as const, end: "2026-03-30" };
+  assert.equal(effStatus(top, today, [mid]).status, "Delayed");
+  assert.equal(effStatus(top, today, [{ ...mid, subtasks: [{ ...late, status: "Done" as const }] }]).status, "In progress");
+});
+
+test("R8 depth limit", () => {
+  assert.equal(MAX_DEPTH, 10);
+  assert.equal(canHaveChildren(0), true); // top-level task → subtask
+  assert.equal(canHaveChildren(MAX_DEPTH - 1), true); // one level above the limit can still take children
+  assert.equal(canHaveChildren(MAX_DEPTH), false); // the deepest level can't
+});
+
+test("descendants walks every level", () => {
+  const t = node("A", 0, [node("B", 0, [node("B1", 0)]), node("C", 0)]);
+  assert.deepEqual(descendants(t).map((x) => x.id), ["B", "B1", "C"]);
+  assert.deepEqual(descendants(node("Z", 0)), []);
 });

@@ -1,5 +1,6 @@
 import { dehydrate, HydrationBoundary, QueryClient } from "@tanstack/react-query";
 import { redirect } from "next/navigation";
+import { connection } from "next/server";
 import { Suspense } from "react";
 import { DashboardApp } from "@/components/DashboardApp";
 import { RetryError } from "@/components/RetryError";
@@ -9,6 +10,9 @@ import { getDashboard, isDemoMode } from "@/lib/data-source";
 // Routing guard (plan 5.2) + prefetch: the page asks getDashboard() directly (not over HTTP) and hands the
 // result to the client cache, so there is no loading flash. The session read must sit behind <Suspense>.
 async function Gate() {
+  // request time only: demo mode reads no cookies, so without this Next would try to prerender the page at build
+  // time and fail on the timestamps the query cache takes (Date.now)
+  await connection();
   const qc = new QueryClient();
   if (isDemoMode()) qc.setQueryData(["me"], { demo: true });
   else {

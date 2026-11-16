@@ -1,5 +1,6 @@
 import { dehydrate, HydrationBoundary, QueryClient } from "@tanstack/react-query";
 import { redirect } from "next/navigation";
+import { connection } from "next/server";
 import { Suspense } from "react";
 import { DashboardApp } from "@/components/v2/DashboardApp";
 import { RetryError } from "@/components/RetryError";
@@ -9,6 +10,7 @@ import "./v2.css";
 
 // Same routing guard + prefetch as the v1 home page, but once for all /v2 views.
 async function Gate({ children }: { children: React.ReactNode }) {
+  await connection(); // request time only, as on the v1 page: demo mode would otherwise be prerendered and fail on Date.now
   const qc = new QueryClient();
   if (isDemoMode()) qc.setQueryData(["me"], { demo: true });
   else {

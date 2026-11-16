@@ -1,7 +1,7 @@
 import { PALETTE } from "./palette";
 import { Id, isValidIso, type DashboardData } from "./schemas";
 import { STATUSES } from "./status";
-import { rollupProgress } from "./subtasks";
+import { MAX_DEPTH, rollupProgress } from "./subtasks";
 
 // Plain Error so this module works in the browser too (the import route maps it to a 400).
 export class ImportError extends Error {}
@@ -51,6 +51,23 @@ export function normalizeImport(raw: unknown): DashboardData {
     };
   };
 
+  // A task with its subtasks, down to MAX_DEPTH (deeper ones are dropped). Subtasks take no dependencies and live in
+  // their parent's workstream. Children are mapped first, so the repair runs bottom-up: each parent ends no earlier
+  // than its latest (repaired) subtask, isn't Done while one is open, and averages them (the API rules).
+  type Mapped = ReturnType<typeof mapTask> & { subtasks?: Mapped[] };
+  const mapTree = (t0: unknown, parentId: string | null, depth: number): Mapped => {
+    const task = mapTask(t0, parentId);
+    if (parentId) task.dependsOn = [];
+    const raw = depth < MAX_DEPTH ? ((t0 ?? {}) as Loose).subtasks : undefined;
+    const subtasks = (Array.isArray(raw) ? (raw as unknown[]) : []).map((s0) => mapTree(s0, task.id, depth + 1));
+    if (!subtasks.length) return { ...task, subtasks: undefined };
+    const latest = subtasks.reduce((m, x) => (x.end > m ? x.end : m), "");
+    const end = task.end < latest ? latest : task.end;
+    const open = subtasks.some((x) => x.status !== "Done");
+    const status = task.status === "Done" && open ? "In progress" : task.status;
+    return { ...task, end, start: task.isMilestone ? end : task.start, status, progress: rollupProgress(subtasks), subtasks };
+  };
+
   const workstreams = d.workstreams.map((w0: unknown, i: number) => {
     const w = (w0 ?? {}) as Loose;
     return {
@@ -61,19 +78,7 @@ export function normalizeImport(raw: unknown): DashboardData {
         : PALETTE[i % PALETTE.length],
       owner: str(w.owner, 80),
       goal: str(w.goal, 400),
-      tasks: (Array.isArray(w.tasks) ? (w.tasks as unknown[]) : []).map((t0) => {
-        const task = mapTask(t0, null);
-        // subtasks: one level only (their own subtasks are dropped), no dependencies, in the parent's workstream
-        const raw = ((t0 ?? {}) as Loose).subtasks;
-        const subtasks = (Array.isArray(raw) ? (raw as unknown[]) : []).map((s0) => ({ ...mapTask(s0, task.id), dependsOn: [] as string[] }));
-        if (!subtasks.length) return { ...task, subtasks: undefined };
-        // repair what the API rules require: the parent ends no earlier than its latest subtask, and isn't Done early
-        const latest = subtasks.reduce((m, x) => (x.end > m ? x.end : m), "");
-        const end = task.end < latest ? latest : task.end;
-        const open = subtasks.some((x) => x.status !== "Done");
-        const status = task.status === "Done" && open ? "In progress" : task.status;
-        return { ...task, end, start: task.isMilestone ? end : task.start, status, progress: rollupProgress(subtasks), subtasks };
-      }),
+      tasks: (Array.isArray(w.tasks) ? (w.tasks as unknown[]) : []).map((t0) => mapTree(t0, null, 0)),
     };
   });
 

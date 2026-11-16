@@ -1,4 +1,5 @@
 // Pure, immutable edits on the workstream list. Used by the cache-only mutation path (demo mode).
+import { findTask } from "./dashboard";
 import { isISO, toDay } from "./date";
 import type { Subtask, Task, Workstream } from "./schemas";
 import { STATUSES } from "./status";
@@ -41,29 +42,51 @@ export function upsertTask(wss: Workstream[], task: Task, wsId: string): Workstr
   });
 }
 
-const editParent = (wss: Workstream[], parentId: string, fn: (p: Task) => Task) =>
-  wss.map((w) => (w.tasks.some((t) => t.id === parentId) ? { ...w, tasks: w.tasks.map((t) => (t.id === parentId ? fn(t) : t)) } : w));
+/** Mirrors the API on one parent after a change below it: re-average (R1), and a Done parent with an unfinished
+ *  subtask is reopened (R6). */
+const settle = (p: Task): Task => {
+  const r = withRollup(p);
+  return r.subtasks?.some((s) => reopensParent(r.status, s.status)) ? { ...r, status: "In progress" } : r;
+};
 
-/** Add or replace a subtask. Mirrors the API: the parent re-averages, and a Done parent is reopened by an unfinished subtask. */
+/** Replaces the task `id`, at any depth, with what `fn` returns (none = removed), then settles every ancestor on the
+ *  way back up. null if `id` isn't in `list`. */
+function editTree(list: Task[], id: string, fn: (t: Task) => Task[]): Task[] | null {
+  const i = list.findIndex((t) => t.id === id);
+  if (i >= 0) return [...list.slice(0, i), ...fn(list[i]), ...list.slice(i + 1)];
+  for (let j = 0; j < list.length; j++) {
+    const next = list[j].subtasks?.length ? editTree(list[j].subtasks!, id, fn) : null;
+    if (next) return list.map((t, k) => (k === j ? settle({ ...t, subtasks: next }) : t));
+  }
+  return null;
+}
+const editNode = (wss: Workstream[], id: string, fn: (t: Task) => Task[]) =>
+  wss.map((w) => { const tasks = editTree(w.tasks, id, fn); return tasks ? { ...w, tasks } : w; });
+
+/** Add or replace a subtask under `parentId`, at any depth. Mirrors the API: every ancestor re-averages, and Done
+ *  ones are reopened by an unfinished subtask. An edit that doesn't carry `subtasks` (the dialog) keeps the existing ones. */
 export function upsertSubtask(wss: Workstream[], parentId: string, sub: Subtask): Workstream[] {
-  return editParent(wss, parentId, (p) => {
+  return editNode(wss, parentId, (p) => {
     const cur = p.subtasks ?? [];
-    const subs = cur.some((x) => x.id === sub.id) ? cur.map((x) => (x.id === sub.id ? sub : x)) : [...cur, sub];
-    return withRollup({ ...p, subtasks: subs, status: reopensParent(p.status, sub.status) ? "In progress" : p.status });
+    const prev = cur.find((x) => x.id === sub.id);
+    const next = withRollup({ ...sub, subtasks: sub.subtasks ?? prev?.subtasks });
+    return [settle({ ...p, subtasks: prev ? cur.map((x) => (x.id === sub.id ? next : x)) : [...cur, next] })];
   });
 }
 
-/** Turn a subtask into a top-level task, slotted by start/end date. Dates and attributes are untouched. */
+/** Move a subtask up one level (D3), its own subtasks with it. Under a top-level parent it becomes a task slotted by
+ *  start/end date; deeper it becomes the last subtask of its grandparent. Dates and attributes are untouched. */
 export function promoteSubtask(wss: Workstream[], id: string): Workstream[] {
-  const ws = wss.find((w) => w.tasks.some((p) => p.subtasks?.some((s) => s.id === id)));
-  const sub = ws?.tasks.flatMap((p) => p.subtasks ?? []).find((s) => s.id === id);
-  if (!ws || !sub) return wss;
-  const top = ws.tasks.map((t, position) => ({ position, start: t.start, end: t.end }));
-  const slot = promoteSlot(top, sub);
-  return wss.map((w) => {
-    if (w.id !== ws.id) return w;
-    const tasks = w.tasks.map((p) => (p.subtasks?.some((s) => s.id === id) ? withRollup({ ...p, subtasks: p.subtasks.filter((s) => s.id !== id) }) : p));
-    tasks.splice(slot, 0, { ...sub, parentId: null, subtasks: [] });
+  const f = findTask(wss, id);
+  if (!f?.parent) return wss;
+  const grand = f.ancestors.at(-2);
+  const out = editNode(wss, id, () => []);
+  if (grand) return editNode(out, grand.id, (g) => [settle({ ...g, subtasks: [...(g.subtasks ?? []), { ...f.t, parentId: g.id }] })]);
+  const slot = promoteSlot(f.ws.tasks.map((t, position) => ({ position, start: t.start, end: t.end })), f.t);
+  return out.map((w) => {
+    if (w.id !== f.ws.id) return w;
+    const tasks = [...w.tasks];
+    tasks.splice(slot, 0, { ...f.t, parentId: null, subtasks: f.t.subtasks ?? [] });
     return { ...w, tasks };
   });
 }
@@ -71,22 +94,23 @@ export function promoteSubtask(wss: Workstream[], id: string): Workstream[] {
 const dropDeps = (wss: Workstream[], ids: string[]) =>
   wss.map((w) => ({ ...w, tasks: w.tasks.map((t) => (t.dependsOn.some((d) => ids.includes(d)) ? { ...t, dependsOn: t.dependsOn.filter((d) => !ids.includes(d)) } : t)) }));
 
-// A top-level task goes with its subtasks; a subtask just leaves its parent (which re-averages).
-// `keepSubtasks`: a deleted parent's subtasks become top-level tasks (dates unchanged, slotted by start/end) instead of going with it.
+// A task goes with all its subtasks; a subtask just leaves its parent (whose ancestors re-average).
+// `keepSubtasks`: the deleted task's direct subtasks move up one level with their own subtasks (D4) instead: under a
+// top-level task they become tasks (dates unchanged, slotted by start/end), deeper they join the grandparent.
 export function removeTask(wss: Workstream[], id: string, keepSubtasks = false): Workstream[] {
-  const parent = wss.flatMap((w) => w.tasks).find((p) => p.id === id);
-  if (keepSubtasks && parent?.subtasks?.length) {
-    const subs = [...parent.subtasks].sort((a, b) => (a.start + a.end).localeCompare(b.start + b.end));
-    return dropDeps(wss.map((w) => {
-      if (!w.tasks.some((t) => t.id === id)) return w;
-      const tasks = w.tasks.filter((t) => t.id !== id);
-      for (const s of subs) tasks.splice(promoteSlot(tasks.map((t, position) => ({ position, start: t.start, end: t.end })), s), 0, { ...s, parentId: null, subtasks: [] });
-      return { ...w, tasks };
-    }), [id]);
+  const f = findTask(wss, id);
+  if (!f) return wss;
+  const kids = keepSubtasks ? [...(f.t.subtasks ?? [])].sort((a, b) => (a.start + a.end).localeCompare(b.start + b.end)) : [];
+  if (f.parent) {
+    const p = f.parent;
+    return editNode(wss, p.id, (x) => [settle({ ...x, subtasks: [...x.subtasks!.filter((s) => s.id !== id), ...kids.map((k) => ({ ...k, parentId: p.id }))] })]);
   }
-  const gone = wss.flatMap((w) => w.tasks).find((p) => p.subtasks?.some((s) => s.id === id));
-  if (gone) return editParent(wss, gone.id, (p) => withRollup({ ...p, subtasks: p.subtasks!.filter((s) => s.id !== id) }));
-  return dropDeps(wss.map((w) => ({ ...w, tasks: w.tasks.filter((t) => t.id !== id) })), [id]);
+  return dropDeps(wss.map((w) => {
+    if (w.id !== f.ws.id) return w;
+    const tasks = w.tasks.filter((t) => t.id !== id);
+    for (const s of kids) tasks.splice(promoteSlot(tasks.map((t, position) => ({ position, start: t.start, end: t.end })), s), 0, { ...s, parentId: null, subtasks: s.subtasks ?? [] });
+    return { ...w, tasks };
+  }), [id]);
 }
 
 export type WorkstreamValues = Pick<Workstream, "name" | "owner" | "goal" | "color">;

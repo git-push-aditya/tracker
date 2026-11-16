@@ -43,8 +43,9 @@ const Modal = ({ title, onClose, children }: { title: string; onClose: () => voi
 
 export type SubDraft = { name: string; owner: string; end: string }; // end "" = the parent's end
 
-export function TaskDialog({ workstreams, owners, task, parent, wsId, today, onSave, onDelete, onClose }: {
+export function TaskDialog({ workstreams, owners, task, parent, parentPath, wsId, today, onSave, onDelete, onClose }: {
   workstreams: Workstream[]; owners: string[]; task: Task | null; parent?: Task | null; wsId?: string; today: number; // parent: set for a subtask (new or existing)
+  parentPath?: string[]; // names from the top-level task down to `parent`, for the "Subtask of A › B" line
   onSave: (f: TaskForm & { wsId: string; subs?: SubDraft[] }) => string | void; // subs: subtasks created together with a new task. returns an error message to show
   onDelete: () => void; onClose: () => void;
 }) {
@@ -81,7 +82,7 @@ export function TaskDialog({ workstreams, owners, task, parent, wsId, today, onS
       }}>
         <div className="grid grid-cols-2 gap-4">
           <Field label="Task name" full><Input name="name" required maxLength={140} defaultValue={t.name} /></Field>
-          {sub && <p className="text-muted-foreground col-span-2 -mt-2 text-sm">Subtask of <b>{parent!.name}</b> · due on or before {parent!.end}</p>}
+          {sub && <p className="text-muted-foreground col-span-2 -mt-2 text-sm">Subtask of <b>{(parentPath?.length ? parentPath : [parent!.name]).join(" › ")}</b> · due on or before {parent!.end}</p>}
           {!sub && <Field label="Workstream">
             <Select value={ws} onValueChange={setWs}>
               <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
@@ -197,11 +198,14 @@ export function WorkstreamDialog({ workstreams, owners, ws, onSave, onDelete, on
   );
 }
 
-// Deleting a task that has subtasks: they go with it, or stay behind as standalone tasks.
-export function DeleteParentDialog({ task, onDeleteAll, onKeepSubtasks, onClose }: {
-  task: Task; onDeleteAll: () => void; onKeepSubtasks: () => void; onClose: () => void;
+// Deleting a task that has subtasks: they go with it, or move up one level — standalone tasks under a top-level
+// task, or subtasks of `parentName` when the deleted one is itself a subtask.
+export function DeleteParentDialog({ task, parentName, onDeleteAll, onKeepSubtasks, onClose }: {
+  task: Task; parentName?: string; onDeleteAll: () => void; onKeepSubtasks: () => void; onClose: () => void;
 }) {
   const n = task.subtasks?.length ?? 0;
+  const s = n === 1 ? "" : "s";
+  const keepLabel = parentName ? `Delete it, move the subtask${s} up into "${parentName}"` : `Delete the task, keep the subtask${s} as standalone task${s}`;
   return (
     <Modal title={`Delete "${task.name}"?`} onClose={onClose}>
       <p className="text-muted-foreground text-sm">This task has {n} subtask{n === 1 ? "" : "s"}. What should happen to {n === 1 ? "it" : "them"}?</p>
@@ -210,7 +214,7 @@ export function DeleteParentDialog({ task, onDeleteAll, onKeepSubtasks, onClose 
           <span><b>Delete the task and its subtask{n === 1 ? "" : "s"}</b><br /><span className="text-muted-foreground font-normal">Everything is removed. This can&apos;t be undone.</span></span>
         </Button>
         <Button type="button" variant="outline" className="h-auto justify-start py-3 text-left whitespace-normal" onClick={onKeepSubtasks}>
-          <span><b>Delete the task, keep the subtask{n === 1 ? "" : "s"} as standalone task{n === 1 ? "" : "s"}</b><br /><span className="text-muted-foreground font-normal">Owners, dates, status and details stay as they are.</span></span>
+          <span><b>{keepLabel}</b><br /><span className="text-muted-foreground font-normal">Owners, dates, status and details stay as they are, and their own subtasks go with them.</span></span>
         </Button>
       </div>
       <DialogFooter><Button type="button" variant="outline" onClick={onClose}>Cancel</Button></DialogFooter>

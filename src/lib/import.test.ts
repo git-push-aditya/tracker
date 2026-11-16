@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { normalizeImport } from "./import";
+import { MAX_DEPTH } from "./subtasks";
 
 test("normalizeImport repairs and rejects", () => {
   const { workstreams } = normalizeImport({
@@ -21,16 +22,50 @@ test("normalizeImport subtasks: nested, repaired to the subtask rules", () => {
   const { workstreams } = normalizeImport({
     workstreams: [{ id: "w", tasks: [
       { id: "p", start: "2026-03-01", end: "2026-03-05", status: "Done", progress: 100, dependsOn: ["s1"], subtasks: [
-        { id: "s1", start: "2026-03-01", end: "2026-03-09", status: "Done", dependsOn: ["p"], subtasks: [{ id: "deep" }] },
+        { id: "s1", start: "2026-03-01", end: "2026-03-09", status: "Done", dependsOn: ["p"], subtasks: [
+          { id: "deep", start: "2026-03-01", end: "2026-03-12", status: "Done", subtasks: [{ id: "deeper", start: "2026-03-01", end: "2026-03-10", status: "Done" }] },
+        ] },
         { id: "s2", start: "2026-03-02", end: "2026-03-04", status: "In progress", progress: 50, owner: "Ben" },
       ] },
       { id: "q", subtasks: [] },
     ] }],
   });
   const [p, q] = workstreams[0].tasks;
-  assert.deepEqual([p.end, p.status, p.progress], ["2026-03-09", "In progress", 75]); // ends with its latest subtask, reopened, averaged
+  assert.deepEqual([p.end, p.status, p.progress], ["2026-03-12", "In progress", 75]); // ends with its latest (repaired) subtask, reopened, averaged
   assert.deepEqual(p.dependsOn, []); // can't depend on a subtask
-  assert.deepEqual(p.subtasks?.map((s) => [s.id, s.parentId, s.dependsOn.length]), [["s1", "p", 0], ["s2", "p", 0]]); // "deep" dropped
+  assert.deepEqual(p.subtasks?.map((s) => [s.id, s.parentId, s.dependsOn.length]), [["s1", "p", 0], ["s2", "p", 0]]);
+  const s1 = p.subtasks![0];
+  assert.deepEqual([s1.end, s1.status], ["2026-03-12", "Done"]); // extended to its own subtask's end
+  assert.deepEqual(s1.subtasks?.map((s) => [s.id, s.parentId]), [["deep", "s1"]]);
+  assert.deepEqual(s1.subtasks![0].subtasks?.map((s) => s.id), ["deeper"]); // depth 3 is within MAX_DEPTH now
   assert.equal(q.subtasks, undefined);
   assert.throws(() => normalizeImport({ workstreams: [{ id: "w", tasks: [{ id: "a", subtasks: [{ id: "a" }] }] }] }), /Duplicate/);
+  assert.throws(() => normalizeImport({ workstreams: [{ id: "w", tasks: [{ id: "a", subtasks: [{ id: "b", subtasks: [{ id: "a" }] }] }] }] }), /Duplicate/);
+});
+
+test("normalizeImport repairs the middle level and rolls progress up two levels", () => {
+  const { workstreams } = normalizeImport({
+    workstreams: [{ id: "w", tasks: [
+      { id: "p", start: "2026-03-01", end: "2026-03-31", status: "Done", subtasks: [
+        { id: "m", start: "2026-03-01", end: "2026-03-20", status: "Done", subtasks: [
+          { id: "x", end: "2026-03-10", start: "2026-03-01", status: "Done" },
+          { id: "y", end: "2026-03-10", start: "2026-03-01", status: "In progress", progress: 0 },
+        ] },
+        { id: "n", start: "2026-03-01", end: "2026-03-05", status: "Done" },
+      ] },
+    ] }],
+  });
+  const p = workstreams[0].tasks[0], m = p.subtasks![0];
+  assert.deepEqual([m.status, m.progress], ["In progress", 50]); // open child reopens the middle level
+  assert.deepEqual([p.status, p.progress], ["In progress", 75]); // avg(m 50, n 100), and reopened in turn
+});
+
+test("normalizeImport keeps MAX_DEPTH levels of subtasks and drops deeper ones", () => {
+  // a chain one level deeper than allowed: top (depth 0) → d1 → … → d(MAX_DEPTH + 1)
+  const chain = (d: number): object => ({ id: `d${d}`, start: "2026-03-01", end: "2026-03-02", subtasks: d <= MAX_DEPTH ? [chain(d + 1)] : [] });
+  const top = normalizeImport({ workstreams: [{ id: "w", tasks: [chain(0)] }] }).workstreams[0].tasks[0];
+  const ids: string[] = [];
+  for (let n: typeof top | undefined = top; n; n = n.subtasks?.[0]) ids.push(n.id);
+  assert.equal(ids.length, MAX_DEPTH + 1); // depth 0 … MAX_DEPTH
+  assert.equal(ids.at(-1), `d${MAX_DEPTH}`);
 });

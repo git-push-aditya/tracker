@@ -75,3 +75,46 @@ test("removeTask can keep a deleted parent's subtasks as standalone tasks", () =
   const s2 = out.find((x) => x.id === "s2")!;
   assert.deepEqual([s2.start, s2.end, s2.progress, s2.status], ["2026-01-05", "2026-01-06", 50, "In progress"]);
 });
+
+// ---- nested subtasks: p → m → (x, y), p → n ----
+const node = (id: string, parentId: string, progress: number, status: Task["status"] = "In progress", subtasks?: Task[]): Task =>
+  ({ ...t(id), parentId, progress, status, subtasks, start: "2026-01-03", end: "2026-01-04" });
+const tree = () => [ws("a", [
+  { ...t("p"), status: "Done", progress: 100, subtasks: [
+    node("m", "p", 100, "Done", [node("x", "m", 100, "Done"), node("y", "m", 100, "Done")]),
+    node("n", "p", 100, "Done"),
+  ] },
+  t("z"),
+])];
+const at = (wss: Workstream[], ...path: number[]) => path.reduce<Task>((n, i) => n.subtasks![i], { subtasks: wss[0].tasks } as Task);
+
+test("upsertSubtask at depth 2 re-averages and reopens every ancestor", () => {
+  const out = upsertSubtask(tree(), "m", node("y", "m", 0, "Not started"));
+  assert.deepEqual([at(out, 0, 0).status, at(out, 0, 0).progress], ["In progress", 50]);
+  assert.deepEqual([at(out, 0).status, at(out, 0).progress], ["In progress", 75]); // avg(m 50, n 100)
+  // a dialog edit of a mid-level task (no `subtasks` on it) keeps its children
+  const renamed = upsertSubtask(tree(), "p", { ...node("m", "p", 0, "Done"), name: "M2", subtasks: undefined });
+  assert.deepEqual([at(renamed, 0, 0).name, at(renamed, 0, 0).subtasks?.length, at(renamed, 0, 0).progress], ["M2", 2, 100]);
+});
+
+test("removeTask at depth 2, and keep moves children up one level", () => {
+  const gone = removeTask(upsertSubtask(tree(), "m", node("y", "m", 0)), "y");
+  assert.deepEqual([at(gone, 0, 0).subtasks?.map((s) => s.id), at(gone, 0, 0).progress, at(gone, 0).progress], [["x"], 100, 100]);
+  const kept = removeTask(tree(), "m", true);
+  assert.deepEqual(at(kept, 0).subtasks?.map((s) => [s.id, s.parentId]), [["n", "p"], ["x", "p"], ["y", "p"]]);
+  const all = removeTask(tree(), "m");
+  assert.deepEqual(at(all, 0).subtasks?.map((s) => s.id), ["n"]);
+  // keep on a top-level task: children become tasks and bring their own subtasks along
+  const top = removeTask(tree(), "p", true)[0].tasks;
+  assert.deepEqual(top.map((x) => [x.id, x.parentId ?? null, x.subtasks?.length ?? 0]), [["z", null, 0], ["m", null, 2], ["n", null, 0]]);
+});
+
+test("promoteSubtask moves up one level, children travel with it", () => {
+  const up = promoteSubtask(tree(), "y");
+  assert.deepEqual(at(up, 0).subtasks?.map((s) => [s.id, s.parentId]), [["m", "p"], ["n", "p"], ["y", "p"]]);
+  assert.deepEqual(at(up, 0, 0).subtasks?.map((s) => s.id), ["x"]);
+  const top = promoteSubtask(tree(), "m")[0].tasks;
+  const m = top.find((x) => x.id === "m")!;
+  assert.deepEqual([m.parentId, m.subtasks?.map((s) => s.id), m.start, m.end], [null, ["x", "y"], "2026-01-03", "2026-01-04"]);
+  assert.deepEqual(at([ws("a", top)], 0).subtasks?.map((s) => s.id), ["n"]);
+});
