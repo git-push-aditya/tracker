@@ -1,6 +1,8 @@
 # Subtasks — implementation guideline
 
-Status: plan only, nothing built. Builds on `Task`, `status.ts`, `/api/tasks`, actors, history.
+Status: built (one level, `cd69178`). Nesting below one level — subtasks of subtasks — is in
+`docs/nested-subtasks-implementation.md`, which replaces the "one level only" rule here with `MAX_DEPTH` and moves
+Promote / delete-keep up one level instead of straight to the top. Builds on `Task`, `status.ts`, `/api/tasks`, actors, history.
 
 ## 1. Shape
 

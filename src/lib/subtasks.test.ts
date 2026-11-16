@@ -78,10 +78,10 @@ test("R5 Delayed propagates from two levels down", () => {
 });
 
 test("R8 depth limit", () => {
-  assert.equal(MAX_DEPTH, 2);
+  assert.equal(MAX_DEPTH, 10);
   assert.equal(canHaveChildren(0), true); // top-level task → subtask
-  assert.equal(canHaveChildren(1), true); // subtask → sub-subtask
-  assert.equal(canHaveChildren(2), false);
+  assert.equal(canHaveChildren(MAX_DEPTH - 1), true); // one level above the limit can still take children
+  assert.equal(canHaveChildren(MAX_DEPTH), false); // the deepest level can't
 });
 
 test("descendants walks every level", () => {

@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import { Maximize2, Minimize2 } from "lucide-react";
+import { Maximize2, Minimize2, Plus } from "lucide-react";
 import { fmt, fmtShort, toDay } from "@/lib/date";
 import { anyFilter, effOf, findTask, type Filters } from "@/lib/dashboard";
 import type { Cell, GanttLayout, GroupRow, TaskRow, Zoom } from "@/lib/gantt-layout";
@@ -7,6 +7,7 @@ import { plain } from "@/lib/md";
 import { wsVars } from "@/lib/palette";
 import type { Task, Workstream } from "@/lib/schemas";
 import { STATUSES, STATUS_META } from "@/lib/status";
+import { canHaveChildren } from "@/lib/subtasks";
 import { Button } from "./ui/button";
 import { Label } from "./ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
@@ -129,7 +130,7 @@ export function GanttGroupRow({ row, W }: { row: GroupRow; W: number }) {
         <button type="button" className="g-group-btn" data-toggle-ws={ws.id} aria-expanded={!collapsed}
           aria-label={`${ws.name}: ${vis.length} tasks, ${p}% complete. ${collapsed ? "Expand" : "Collapse"}`}>
           <Chevron />
-          <span className="swatch" /><span className="nm">{ws.name}</span><span className="ct">{vis.length} · {p}%</span>
+          <span className="swatch" /><span className="nm">{ws.name}</span><span className="ct">{vis.length} task{vis.length === 1 ? "" : "s"} · {p}%</span>
         </button>
       </div>
       <div className="g-track" style={{ width: W }}>
@@ -199,6 +200,11 @@ export function GanttTaskRow({ row, W, canEdit }: { row: TaskRow; W: number; can
           <span className="nm">{t.isMilestone && <span className="ms-mark" aria-hidden="true">◆ </span>}{t.name}</span>
           <span className="sub"><StatusBadge status={es.status} /><span className="owner">{t.owner}</span>{subCount > 0 && <span className="sub-count">{subCount} subtask{subCount === 1 ? "" : "s"}</span>}</span>
         </button>
+        {canEdit && canHaveChildren(depth) && (
+          <button type="button" className="g-add-sub" data-add-sub={t.id} title={`Add a subtask to "${t.name}"`} aria-label={`Add a subtask to ${t.name}`}>
+            <Plus aria-hidden="true" />
+          </button>
+        )}
       </div>
       <div className="g-track" style={{ width: W }}>
         {t.isMilestone ? <MilestoneDiamond row={row} /> : <TaskBar row={row} />}

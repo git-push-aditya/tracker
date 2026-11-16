@@ -1,14 +1,15 @@
 # Nested subtasks — implementation guideline
 
-Status: plan only, nothing built. Extends `docs/subtasks-implementation.md` (one level, shipped in `cd69178`) so a
+Status: built with the decisions in section 1 (D1–D6) — phase 1 `cbbf0bb`, phase 2 `09cd945`, phase 3 `68549bc`.
+`MAX_DEPTH` was then raised from 2 to 10 (D1); the depth-2 examples below still hold at any depth. Extends `docs/subtasks-implementation.md` (one level, shipped in `cd69178`) so a
 subtask can have subtasks of its own. Wording: a **node** is any task row; **top-level** = `parentId` null; **depth** =
 number of ancestors (top-level 0, subtask 1, sub-subtask 2).
 
-## 1. Decisions (defaults chosen, confirm before Phase 1)
+## 1. Decisions (defaults approved and built)
 
 | # | Question | Default | Why |
 |---|---|---|---|
-| D1 | How deep? | `MAX_DEPTH = 2` (task → subtask → sub-subtask), one constant in `subtasks.ts` | What was asked; every rule below is written for any depth, so raising it later is a one-line change plus UI indent check |
+| D1 | How deep? | `MAX_DEPTH = 10` levels of subtasks below a task, one constant in `subtasks.ts` (first built as 2) | Every rule below is written for any depth. The UI indents up to `--indent-cap` levels (6; 4 on phones) and lines deeper ones up with the cap, so names keep their room in the Gantt's 270px label column |
 | D2 | What does a parent's progress average? | Its **direct children**, each using its own rollup (recursive) | Same rule as today applied at every level; "3 of 5 done" stays meaningful. Averaging leaves would weight deep branches more |
 | D3 | What does Promote / "Extract" do on a sub-subtask? | Moves it **up one level** (becomes a subtask of its grandparent). On a depth-1 subtask it stays as today (becomes a task) | Always valid: grandparent end ≥ parent end ≥ its end, so R4 can't fail. No dates touched |
 | D4 | Deleting a mid-level node with "keep subtasks" | Its children move **up one level** to its parent (top-level parent: they become tasks, as today) | Same mechanic as D3 |
