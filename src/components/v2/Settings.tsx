@@ -1,7 +1,8 @@
 "use client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
+import { GOOGLE_LABELS, GOOGLE_TOOLKITS, type GoogleStatus, type GoogleToolkit } from "@/lib/google-toolkits";
 import { ACTORS_KEY, type ActorRow } from "@/hooks/v2/useActors";
 import { can } from "@/lib/auth-rules";
 import { wsVars } from "@/lib/palette";
@@ -116,6 +117,49 @@ function Workstreams({ workstreams, canCreate, canEdit }: { workstreams: Workstr
           </li>
         ))}
         {!workstreams.length && <li className="text-muted-foreground py-2.5 text-sm">No workstreams yet.</li>}
+      </ul>
+    </Section>
+  );
+}
+
+function Google() {
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ["google-status"], queryFn: () => api<Record<GoogleToolkit, GoogleStatus>>("GET", "/api/integrations/google") });
+  const act = useMutation({
+    mutationFn: async ({ toolkit, connect }: { toolkit: GoogleToolkit; connect: boolean }) => {
+      if (!connect) return api("DELETE", `/api/integrations/google/${toolkit}`);
+      const { redirectUrl } = await api<{ redirectUrl: string }>("POST", `/api/integrations/google/${toolkit}`);
+      location.assign(redirectUrl); // Google sign-in on Composio's page, then back here with ?connected=
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["google-status"] }),
+  });
+  // Back from sign-in: drop the hint from the URL; the status query re-checks with the server
+  useEffect(() => {
+    const u = new URL(location.href);
+    if (u.searchParams.has("connected")) { u.searchParams.delete("connected"); history.replaceState(history.state, "", u); }
+  }, []);
+  const err = act.error ?? q.error;
+  return (
+    <Section title="Connected accounts" desc="Connect your own Google account to use Gmail, Calendar, Docs and Sheets here. Each product asks for its own permission.">
+      {err && <p className="text-destructive mb-3 text-sm" role="alert">{(err as ApiError).message}</p>}
+      <ul className="divide-y">
+        {GOOGLE_TOOLKITS.map((t) => {
+          const st = q.data?.[t];
+          const pending = act.isPending && act.variables?.toolkit === t;
+          return (
+            <li key={t} className="flex items-center gap-3 py-2.5">
+              <b className="text-sm">{GOOGLE_LABELS[t]}</b>
+              {st === "connected" && <Badge variant="secondary">Connected</Badge>}
+              {st === "expired" && <Badge variant="destructive">Needs reconnect</Badge>}
+              {st && (
+                <Button className="ml-auto" size="sm" variant={st === "connected" ? "outline" : "default"} type="button" disabled={act.isPending}
+                  onClick={() => act.mutate({ toolkit: t, connect: st !== "connected" })}>
+                  {pending ? "…" : st === "connected" ? "Disconnect" : st === "expired" ? "Reconnect" : "Connect"}
+                </Button>
+              )}
+            </li>
+          );
+        })}
       </ul>
     </Section>
   );
@@ -251,6 +295,7 @@ export function Settings({ workstreams, user, demo, permissions }: {
       <p className="text-muted-foreground text-sm">Account, workstreams and team</p>
       <div className="mt-6 grid gap-6">
         {demo ? <Card><CardContent className="text-muted-foreground text-sm">Account and team settings need the database; this is demo mode.</CardContent></Card> : <Account />}
+        {!demo && can(permissions, "integrations:google") && <Google />}
         <Workstreams workstreams={workstreams} canCreate={can(permissions, "workstream:create")} canEdit={can(permissions, "workstream:update")} />
         {!demo && can(permissions, "actors:manage") && <People />}
         {!demo && can(permissions, "users:manage") && can(permissions, "roles:read") && <Team me={user?.username ?? ""} />}

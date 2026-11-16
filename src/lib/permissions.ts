@@ -13,6 +13,7 @@ export const PERMISSIONS = {
   "roles:read": "List roles and permissions",
   "roles:manage": "Create, edit and delete roles",
   "actors:manage": "Rename, merge and delete people (task owners)",
+  "integrations:google": "Connect their own Google account (Gmail, Calendar, Docs, Sheets)",
 } as const;
 
 export type PermissionKey = keyof typeof PERMISSIONS;
