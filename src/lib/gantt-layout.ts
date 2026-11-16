@@ -3,7 +3,8 @@
 import { addMonths, DAY, MON, parts, toDay } from "./date";
 import { avg, effOf } from "./dashboard";
 import type { Task, Workstream } from "./schemas";
-import { effStatus } from "./status";
+import type { effStatus } from "./status";
+import { descendants } from "./subtasks";
 
 export const ZOOM_PX = { week: 30, month: 8, quarter: 2.6 } as const;
 export type Zoom = keyof typeof ZOOM_PX;
@@ -50,7 +51,7 @@ export function arrowPath(a: { xe: number; y: number }, b: { xs: number; y: numb
 export type GroupRow = { kind: "group"; ws: Workstream; vis: Task[]; p: number; collapsed: boolean; sum: { left: number; width: number } | null };
 export type TaskRow = {
   kind: "task"; ws: Workstream; t: Task; es: ReturnType<typeof effStatus>;
-  sub?: boolean; subCount: number; expanded: boolean; // sub: a subtask row; subCount/expanded: on a parent
+  depth: number; subCount: number; expanded: boolean; // depth: 0 for a task, 1+ for subtasks; subCount/expanded: on a parent
   left: number; w: number; cx: number; // bar: left/w; milestone: cx
 };
 export type GanttLayout = ReturnType<typeof layoutGantt>;
@@ -62,7 +63,7 @@ export function layoutGantt(a: {
   const { workstreams, zoom, today, collapsed } = a;
   const visible = a.visible ?? (() => true);
   const px = ZOOM_PX[zoom];
-  const { start, end } = timeRange(workstreams.flatMap((w) => w.tasks.flatMap((t) => [t, ...(t.subtasks ?? [])])), today); // all tasks: stable while filtering
+  const { start, end } = timeRange(workstreams.flatMap((w) => w.tasks.flatMap((t) => [t, ...descendants(t)])), today); // all tasks: stable while filtering
   const W = Math.round((end - start) * px);
   const X = (d: number) => (d - start) * px;
   const { top, bot } = headerTiers(start, end, zoom);
@@ -85,7 +86,7 @@ export function layoutGantt(a: {
     rows.push({ kind: "group", ws, vis, p, collapsed: isCollapsed, sum });
     y += GROUP_H;
     if (isCollapsed) continue;
-    const bar = (t: Task, es: TaskRow["es"], extra: Pick<TaskRow, "sub" | "subCount" | "expanded">) => {
+    const bar = (t: Task, es: TaskRow["es"], extra: Pick<TaskRow, "depth" | "subCount" | "expanded">) => {
       const s = toDay(t.start), e = toDay(t.end);
       if (t.isMilestone) {
         const cx = X(e + 0.5);
@@ -98,12 +99,16 @@ export function layoutGantt(a: {
       }
       y += ROW_H;
     };
-    for (const t of vis) {
+    // a row, then (while it is expanded) its subtasks' rows, at every depth
+    const node = (t: Task, depth: number) => {
       const subs = t.subtasks ?? [];
       const open = subs.length > 0 && (a.expanded ?? []).includes(t.id);
-      bar(t, effOf(t, today), { subCount: subs.length, expanded: open });
+      bar(t, effOf(t, today), { depth, subCount: subs.length, expanded: open });
+      if (open) for (const x of subs) node(x, depth + 1);
+    };
+    for (const t of vis) {
+      node(t, 0);
       shown.push(t);
-      if (open) for (const x of subs) bar(x, effStatus(x, today), { sub: true, subCount: 0, expanded: false });
     }
   }
 

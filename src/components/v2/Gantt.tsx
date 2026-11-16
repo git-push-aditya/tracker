@@ -6,7 +6,7 @@ import type { Cell, GanttLayout, GroupRow, TaskRow, Zoom } from "@/lib/gantt-lay
 import { plain } from "@/lib/md";
 import { wsVars } from "@/lib/palette";
 import type { Task, Workstream } from "@/lib/schemas";
-import { effStatus, STATUSES, STATUS_META } from "@/lib/status";
+import { STATUSES, STATUS_META } from "@/lib/status";
 import { Button } from "./ui/button";
 import { Label } from "./ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
@@ -182,12 +182,12 @@ export function MilestoneDiamond({ row }: { row: TaskRow }) {
 
 // canEdit → label opens the editor; view-only → label scrolls to the task's card
 export function GanttTaskRow({ row, W, canEdit }: { row: TaskRow; W: number; canEdit: boolean }) {
-  const { ws, t, es, sub, subCount, expanded } = row;
+  const { ws, t, es, depth, subCount, expanded } = row;
   const label = canEdit
     ? { "data-edit": t.id, title: `Edit "${t.name}"`, "aria-label": `Edit task ${t.name}` }
     : { "data-scroll": t.id, title: `Show details for "${t.name}"`, "aria-label": `Show details for ${t.name}` };
   return (
-    <div className={`g-row c-ws${sub ? " is-sub" : ""}`} style={wsVars(ws.color)}>
+    <div className={`g-row c-ws${depth ? " is-sub" : ""}`} style={{ ...wsVars(ws.color), "--depth": depth } as React.CSSProperties}>
       <div className="g-label">
         {subCount > 0 && (
           <button type="button" className="g-sub-toggle" data-toggle-task={t.id} aria-expanded={expanded}
@@ -251,13 +251,13 @@ export function Tooltip({ workstreams, taskId, today, show, ref }: {
 }) {
   const f = taskId ? findTask(workstreams, taskId) : null;
   if (!f) return <div className="tip" id="tip" role="tooltip" ref={ref} />;
-  const { ws, t, parent } = f;
-  const s = toDay(t.start), e = toDay(t.end), es = parent ? effStatus(t, today) : effOf(t, today);
+  const { ws, t, ancestors } = f;
+  const s = toDay(t.start), e = toDay(t.end), es = effOf(t, today);
   const deps = t.dependsOn.map((d) => findTask(workstreams, d)).filter(Boolean).map((d) => d!.t.name).join(", ");
   return (
     <div className={`tip${show ? " show" : ""}`} id="tip" role="tooltip" ref={ref}>
       <h4>{t.isMilestone ? "◆ " : ""}{t.name}</h4>
-      {parent && <div className="ws">Subtask of {parent.name}</div>}
+      {ancestors.length > 0 && <div className="ws">Subtask of {ancestors.map((a) => a.name).join(" › ")}</div>}
       <div className="ws"><span className="swatch c-ws" style={wsVars(ws.color)} />{ws.name}</div>
       <dl>
         <dt>Owner</dt><dd>{t.owner || "—"}</dd>

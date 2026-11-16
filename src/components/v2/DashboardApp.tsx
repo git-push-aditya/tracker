@@ -184,13 +184,24 @@ function Board({ source, workstreams, today, ui, setUi, theme, me, reset }: {
   };
 
   /* ---------- subtasks ---------- */
-  // Saves a subtask. A due date after the parent's is refused by the server, so offer to extend the parent first.
+  // Saves a subtask. A due date after its parent's is refused by the server (at every level), so offer to extend
+  // each ancestor that ends too early first, top-level first so every one stays within its own parent.
   async function persistSub(sub: Subtask, parent: Task, isNew: boolean) {
     const pf = findTask(workstreams, parent.id);
-    if (sub.end > parent.end && pf) {
-      if (!confirm(`"${sub.name}" is due ${fmt(toDay(sub.end))}, after "${parent.name}" (${fmt(toDay(parent.end))}). Extend "${parent.name}" to ${fmt(toDay(sub.end))}?`)) return;
-      const task = { ...parent, end: sub.end, start: parent.isMilestone ? sub.end : parent.start };
-      try { await saveTask.mutateAsync({ task, wsId: pf.ws.id, isNew: false }); } catch { return; }
+    if (!pf) return;
+    const chain = [...pf.ancestors, pf.t];
+    const short = chain.filter((a) => a.end < sub.end);
+    if (short.length) {
+      const names = short.map((a) => `"${a.name}" (${fmt(toDay(a.end))})`).join(" and ");
+      if (!confirm(`"${sub.name}" is due ${fmt(toDay(sub.end))}, after ${names}. Extend ${short.length > 1 ? "them" : "it"} to ${fmt(toDay(sub.end))}?`)) return;
+      for (const [i, a] of chain.entries()) {
+        if (a.end >= sub.end) continue;
+        const task = { ...a, end: sub.end, start: a.isMilestone ? sub.end : a.start };
+        try {
+          if (i === 0) await saveTask.mutateAsync({ task, wsId: pf.ws.id, isNew: false });
+          else await saveSub.mutateAsync({ sub: task, parentId: chain[i - 1].id, isNew: false });
+        } catch { return; }
+      }
     }
     saveSub.mutateAsync({ sub: { ...sub, parentId: parent.id }, parentId: parent.id, isNew }).then(() => { refreshActors(); if (sub.status === "Done") refreshHistory(); }, () => {});
   }
@@ -199,15 +210,20 @@ function Board({ source, workstreams, today, ui, setUi, theme, me, reset }: {
     save: (sub, patch, parent) => { if (!busy()) void persistSub({ ...sub, ...patch }, parent, false); },
     remove: (sub, parent) => {
       if (busy()) return;
+      if (sub.subtasks?.length) return setDlg({ kind: "delete", id: sub.id, n: ++seq.current }); // ask what happens to its subtasks
       if (!confirm(`Delete subtask "${sub.name}"? ${parent.name}'s progress will be recalculated.`)) return;
       deleteTask.mutateAsync(sub.id).then(refreshHistory, () => {}); toast("Subtask deleted");
     },
+    // one level up: under a top-level parent it becomes a task, deeper it joins the grandparent
     promote: (sub, parent) => {
       if (busy()) return;
+      const grand = findTask(workstreams, sub.id)?.ancestors.at(-2);
       const rest = (parent.subtasks ?? []).filter((x) => x.id !== sub.id);
       const effect = rest.length ? `${parent.name} progress changes from ${parent.progress}% to ${rollupProgress(rest)}%.` : `${parent.name} will have no subtasks left.`;
-      if (!confirm(`Move "${sub.name}" out of "${parent.name}" and make it a task? Its dates and details stay as they are. ${effect}`)) return;
-      promoteSub.mutateAsync(sub.id).then(() => { toast("Now a task"); if (view === "ws") scrollToTask(sub.id); }, () => {});
+      const where = grand ? `move it up into "${grand.name}"` : "make it a task";
+      const kids = sub.subtasks?.length ? ", and its subtasks go with it" : "";
+      if (!confirm(`Move "${sub.name}" out of "${parent.name}" and ${where}? Its dates and details stay as they are${kids}. ${effect}`)) return;
+      promoteSub.mutateAsync(sub.id).then(() => { toast(grand ? "Moved up a level" : "Now a task"); if (view === "ws") scrollToTask(sub.id); }, () => {});
     },
   };
   const openWs = (id: string | null) => !busy() && setDlg({ kind: "ws", id, n: ++seq.current });
@@ -217,6 +233,10 @@ function Board({ source, workstreams, today, ui, setUi, theme, me, reset }: {
     if ("error" in r) return r.error;
     if (dlg?.kind === "task" && dlg.parentId && !dlgParent) return "That parent task no longer exists."; // deleted while this was open
     if (dlgParent) { // a subtask: saved under its parent, whose workstream it shares
+      if (editTask?.subtasks?.length) { // a mid-level subtask is also a parent: Done and its due date are limited too
+        const err = parentChangeError(editTask.subtasks, { status: r.task.status, end: r.task.end });
+        if (err) return err;
+      }
       const sub: Subtask = { ...r.task, parentId: dlgParent.id, dependsOn: [] };
       setDlg(null);
       toast(f.id ? "Subtask updated" : "Subtask added");
@@ -250,8 +270,9 @@ function Board({ source, workstreams, today, ui, setUi, theme, me, reset }: {
   }
   function onDeleteParent(id: string, keep: boolean) {
     if (busy()) return;
+    const nested = !!findTask(workstreams, id)?.parent; // read before the optimistic delete removes it
     (keep ? deleteKeep : deleteTask).mutateAsync(id).then(refreshHistory, () => {});
-    setDlg(null); toast(keep ? "Task deleted, subtasks kept" : "Task and subtasks deleted");
+    setDlg(null); toast(keep ? (nested ? "Deleted, its subtasks moved up a level" : "Task deleted, subtasks kept") : "Deleted with its subtasks");
   }
   function onSaveWs(v: WorkstreamValues, id: string | null) {
     if (!v.name) return "Please give the workstream a name.";
@@ -325,11 +346,13 @@ function Board({ source, workstreams, today, ui, setUi, theme, me, reset }: {
 
   const tasks = allTasks(workstreams);
   const shown = tasks.filter(({ ws, t }) => matches(filters, ws, t, today)).length;
-  const delTask = dlg?.kind === "delete" ? findTask(workstreams, dlg.id)?.t : undefined;
+  const delFound = dlg?.kind === "delete" ? findTask(workstreams, dlg.id) : null;
+  const delTask = delFound?.t;
   const found = dlg?.kind === "task" && dlg.id ? findTask(workstreams, dlg.id) : null;
   const editTask = found?.t ?? null;
   // set when the dialog is for a subtask (new: from the "+ Add subtask" button; existing: found under its parent)
   const dlgParent = dlg?.kind === "task" ? found?.parent ?? (dlg.parentId ? findTask(workstreams, dlg.parentId)?.t : undefined) ?? null : null;
+  const dlgPath = dlgParent ? [...(findTask(workstreams, dlgParent.id)?.ancestors ?? []), dlgParent].map((a) => a.name) : []; // "A › B" in the dialog
   const editWs = dlg?.kind === "ws" && dlg.id ? workstreams.find((w) => w.id === dlg.id) ?? null : null;
 
   const curWs = view === "ws" ? workstreams.find((w) => w.id === wsId) : undefined;
@@ -377,11 +400,11 @@ function Board({ source, workstreams, today, ui, setUi, theme, me, reset }: {
       <Tooltip workstreams={workstreams} today={today} taskId={tip.id || undefined} show={tip.show} ref={tipRef} />
       <Toast message={toastMsg} show={toastShow} />
       {canEdit && dlg?.kind === "task" && (
-        <TaskDialog key={dlg.n} workstreams={workstreams} owners={people} task={editTask} parent={dlgParent} wsId={dlg.wsId} today={today}
+        <TaskDialog key={dlg.n} workstreams={workstreams} owners={people} task={editTask} parent={dlgParent} parentPath={dlgPath} wsId={dlg.wsId} today={today}
           onSave={onSaveTask} onDelete={() => dlg.id && onDeleteTask(dlg.id)} onClose={() => setDlg(null)} />
       )}
       {canEdit && dlg?.kind === "delete" && delTask && (
-        <DeleteParentDialog key={dlg.n} task={delTask} onDeleteAll={() => onDeleteParent(dlg.id, false)} onKeepSubtasks={() => onDeleteParent(dlg.id, true)} onClose={() => setDlg(null)} />
+        <DeleteParentDialog key={dlg.n} task={delTask} parentName={delFound?.parent?.name} onDeleteAll={() => onDeleteParent(dlg.id, false)} onKeepSubtasks={() => onDeleteParent(dlg.id, true)} onClose={() => setDlg(null)} />
       )}
       {canEdit && dlg?.kind === "ws" && (
         <WorkstreamDialog key={dlg.n} workstreams={workstreams} owners={people} ws={editWs}

@@ -17,7 +17,7 @@ export function TaskArticle({ ws, t, all, today, canEdit, owners = [], subAction
     <article className="task c-ws" id={`task-${t.id}`} tabIndex={-1} style={wsVars(ws.color)}>
       <div className="task-top">
         <h4>{t.isMilestone && <><span className="ms-mark" aria-label="Milestone">◆</span>{" "}</>}{t.name}</h4>
-        <StatusBadge status={es.status} />{es.auto && <span className="auto-note">{t.subtasks?.some((x) => effStatus(x, today).status === "Delayed") && toDay(t.end) >= today ? "auto-flagged: a subtask is delayed" : "auto-flagged: end date passed"}</span>}
+        <StatusBadge status={es.status} />{es.auto && <span className="auto-note">{t.subtasks?.some((x) => effStatus(x, today, x.subtasks).status === "Delayed") && toDay(t.end) >= today ? "auto-flagged: a subtask is delayed" : "auto-flagged: end date passed"}</span>}
         <span className="pct" title={nSubs ? `Average of ${nSubs} subtask${nSubs === 1 ? "" : "s"}` : undefined}>{t.progress}%</span>
       </div>
       <div className="task-meta">
