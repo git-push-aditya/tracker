@@ -85,7 +85,8 @@
   --today: #d03b3b;
   --shadow: 0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05);
   --label-w: 270px;
-  --indent-step: 14px; --indent-cap: 6; /* nested subtask indent per level, and how many levels indent at most */
+  --rail: color-mix(in srgb, var(--muted) 45%, transparent); /* gantt indent guides */
+  --indent-step: 22px; --indent-cap: 6; /* nested subtask indent per level, and how many levels indent at most */
 }
 
 @media (prefers-color-scheme: dark) {
@@ -342,7 +343,7 @@ footer { margin-top: 40px; color: var(--muted); font-size: 12px; text-align: cen
   .ws-actions { justify-content: flex-start; }
 }
 @media (max-width: 640px) {
-  :root { --label-w: 160px; --indent-step: 8px; --indent-cap: 4; }
+  :root { --label-w: 160px; --indent-step: 12px; --indent-cap: 4; }
   .wrap { padding: 16px 16px 60px; }
   .brand h1 { font-size: 20px; }
   .stats { grid-template-columns: repeat(2, 1fr); }
@@ -455,14 +456,32 @@ input, select, textarea, .badge, .tip, .toast, .demo-banner { font-family: var(-
   .sub-actions { grid-column: 1 / -1; justify-content: flex-start; }
 }
 
-/* gantt: parent toggle + indented subtask rows */
+/* gantt: parent toggle + indented subtask rows.
+   Hierarchy cues (tree-view guidance from Primer, SaaSFrame and Ahmad Shadeed's tree-indent article):
+   - every row reserves the same toggle column, so a leaf task lines up exactly with a sibling that has a chevron;
+   - one clear indent step per level (22px; was 14px, too close to read as a level);
+   - indent guides: a quiet vertical rail under each ancestor's chevron, plus an elbow into the row, so a subtask visibly
+     hangs off its parent and the next top-level task (no rail) can't be mistaken for one;
+   - a task "family" (a top-level task and its subtasks) starts with a stronger divider, and subtasks use lighter type. */
 .g-label > .g-sub-toggle { width: 28px; flex: none; justify-content: center; padding: 0 0 0 8px; }
 .g-label:has(.g-sub-toggle) > .g-task-btn { padding-left: 6px; }
-.g-row.is-sub .g-label { background: color-mix(in srgb, var(--surface-2) 45%, var(--surface)); }
-.g-row.is-sub .g-label > .g-task-btn { padding-left: calc(30px + min(var(--depth, 1), var(--indent-cap)) * var(--indent-step)); }
-.g-row.is-sub .g-label > .g-sub-toggle { width: auto; padding-left: calc(8px + min(var(--depth, 1), var(--indent-cap)) * var(--indent-step)); }
+.g-row.is-sub .g-label {
+  --lvl: min(var(--depth, 1), var(--indent-cap));
+  background-color: color-mix(in srgb, var(--surface-2) 35%, var(--surface));
+  background-image: repeating-linear-gradient(90deg, var(--rail) 0 1px, transparent 1px var(--indent-step));
+  background-size: calc(var(--lvl) * var(--indent-step)) 100%; background-position: 21px 0; background-repeat: no-repeat;
+}
+.g-row.is-sub .g-label::before { /* the elbow from the parent's rail into this row */
+  content: ""; position: absolute; top: 50%; height: 1px; background: var(--rail); pointer-events: none;
+  left: calc(21px + (var(--lvl) - 1) * var(--indent-step)); width: calc(var(--indent-step) - 4px);
+}
+.g-row.is-sub .g-label > .g-task-btn { padding-left: calc(30px + var(--lvl) * var(--indent-step)); }
+.g-row.is-sub .g-label > .g-sub-toggle { width: auto; padding-left: calc(8px + var(--lvl) * var(--indent-step)); }
 .g-row.is-sub .g-label:has(.g-sub-toggle) > .g-task-btn { padding-left: 6px; }
+.g-row.is-sub .g-task-btn .nm { font-weight: 450; color: color-mix(in srgb, var(--ink) 85%, var(--muted)); }
 .g-row.is-sub .bar { top: 15px; height: 14px; }
+.g-row:not(.group):not(.is-sub) { box-shadow: inset 0 1px 0 var(--grid-strong), inset 0 -1px 0 var(--grid); } /* a family starts here */
+.g-row:not(.group):not(.is-sub) .g-task-btn .nm { font-weight: 600; }
 
 /* "+" to add a subtask from the Gantt: at the right of the task's label, shown on hover / keyboard focus
    (always on touch screens, which have no hover) */
@@ -470,7 +489,9 @@ input, select, textarea, .badge, .tip, .toast, .demo-banner { font-family: var(-
 .g-label > .g-add-sub svg { width: 16px; height: 16px; }
 .g-label > .g-add-sub:hover { color: var(--ink); }
 .g-row:hover .g-add-sub, .g-label:focus-within .g-add-sub { opacity: 1; }
-@media (hover: none) { .g-label > .g-add-sub { opacity: 1; } }
+@media (hover: none) { .g-label > .g-add-sub { opacity: 1; } .g-row.group .g-group-btn { padding-right: 42px; } }
+/* on a workstream row the "+" adds a task; the count it would cover hides while it shows */
+@media (hover: hover) { .g-row.group:hover .g-group-btn .ct, .g-row.group .g-label:focus-within .g-group-btn .ct { visibility: hidden; } }
 
 /* workstream rows vs task rows: the workstream row is tinted with its colour across the whole width and gets a solid
    colour edge, so it can't be mistaken for a top-level task */

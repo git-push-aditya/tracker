@@ -47,7 +47,7 @@ export function DashboardApp() {
   const today = useToday();
   const q = useDashboard();
   const { ui, setUi, loaded } = useUiState();
-  const theme = useTheme();
+  useTheme(); // applies the saved theme; it's chosen in Settings → Appearance
   const me = useMe();
 
   if (today === null || !loaded || !me.ready || (!q.data && !q.isError)) return <div className="wrap" />;
@@ -58,14 +58,14 @@ export function DashboardApp() {
       </div>
     );
   return (
-    <Board source={q.data.source} workstreams={q.data.workstreams} today={today} ui={ui} setUi={setUi} theme={theme} me={me}
+    <Board source={q.data.source} workstreams={q.data.workstreams} today={today} ui={ui} setUi={setUi} me={me}
       reset={async () => { await q.refetch(); }} />
   );
 }
 
-function Board({ source, workstreams, today, ui, setUi, theme, me, reset }: {
+function Board({ source, workstreams, today, ui, setUi, me, reset }: {
   source: "demo" | "db"; workstreams: Workstream[]; today: number; ui: Ui; setUi: (p: (u: Ui) => Partial<Ui>) => void;
-  theme: ReturnType<typeof useTheme>; me: ReturnType<typeof useMe>; reset: () => Promise<void>;
+  me: ReturnType<typeof useMe>; reset: () => Promise<void>;
 }) {
   const saveTask = useSaveTask(), saveSub = useSaveSubtask(), promoteSub = usePromoteSubtask(), deleteTask = useDeleteTask(), deleteKeep = useDeleteTaskKeepSubtasks(), saveWs = useSaveWorkstream(), deleteWs = useDeleteWorkstream(), importData = useImport();
   const demo = source === "demo";
@@ -346,7 +346,6 @@ function Board({ source, workstreams, today, ui, setUi, theme, me, reset }: {
     if (id === "btnClearFilters") return setPicked(NO_FILTERS);
     if (id === "btnAddTask") return openTask(null);
     if (id === "btnAddWs") return openWs(null);
-    if (id === "btnTheme") return theme.cycle();
     if (id === "btnReset") return void resetSample();
     if (id === "btnLogout") return void logout();
   }
@@ -367,7 +366,7 @@ function Board({ source, workstreams, today, ui, setUi, theme, me, reset }: {
     <>
       <SidebarProvider className="bg-sidebar md:h-svh md:overflow-hidden" onClick={onClick}
 >
-        <Sidebar workstreams={workstreams} path={path} user={me.user} themeLabel={theme.label}
+        <Sidebar workstreams={workstreams} path={path} user={me.user}
           canCreate={can(me.permissions, "workstream:create")} showGoogle={!demo && can(me.permissions, "integrations:google")} showNotion={!demo && can(me.permissions, "integrations:notion")} onLogout={() => void logout()} onPickTask={(id, ws) => scrollToTask(id, ws)} />
         <SidebarInset className="bg-[var(--side-card)] md:h-[calc(100svh-1rem)] md:min-h-0 md:overflow-y-auto md:border md:border-[var(--side-card-border)] md:peer-data-[variant=inset]:rounded-2xl">
         <TopBar view={view} wsName={curWs?.name} />

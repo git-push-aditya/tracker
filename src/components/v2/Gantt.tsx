@@ -122,7 +122,7 @@ export function GanttOverlay({ layout, today }: { layout: GanttLayout; today: nu
 }
 
 /* ---------- rows ---------- */
-export function GanttGroupRow({ row, W }: { row: GroupRow; W: number }) {
+export function GanttGroupRow({ row, W, canEdit }: { row: GroupRow; W: number; canEdit: boolean }) {
   const { ws, vis, p, collapsed, sum } = row;
   return (
     <div className="g-row group c-ws" style={wsVars(ws.color)}>
@@ -132,6 +132,11 @@ export function GanttGroupRow({ row, W }: { row: GroupRow; W: number }) {
           <Chevron />
           <span className="swatch" /><span className="nm">{ws.name}</span><span className="ct">{vis.length} task{vis.length === 1 ? "" : "s"} · {p}%</span>
         </button>
+        {canEdit && (
+          <button type="button" className="g-add-sub" data-add={ws.id} title={`Add a task to ${ws.name}`} aria-label={`Add a task to ${ws.name}`}>
+            <Plus aria-hidden="true" />
+          </button>
+        )}
       </div>
       <div className="g-track" style={{ width: W }}>
         {sum && <div className="sumbar" style={{ left: sum.left, width: sum.width }} aria-hidden="true"><span style={{ width: `${p}%` }} /></div>}
@@ -225,7 +230,7 @@ export function Gantt({ layout, today, canEdit, hasFilter, totalTasks }: {
           <GanttOverlay layout={layout} today={today} />
           {layout.rows.map((r) =>
             r.kind === "group"
-              ? <GanttGroupRow key={"g" + r.ws.id} row={r} W={layout.W} />
+              ? <GanttGroupRow key={"g" + r.ws.id} row={r} W={layout.W} canEdit={canEdit} />
               : <GanttTaskRow key={r.t.id} row={r} W={layout.W} canEdit={canEdit} />)}
         </div>
       ) : (

@@ -1,10 +1,13 @@
 "use client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { History as HistoryIcon, Monitor, Moon, Sun } from "lucide-react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { GOOGLE_LABELS, GOOGLE_TOOLKITS, type GoogleStatus, type GoogleToolkit } from "@/lib/google-toolkits";
 import { ACTORS_KEY, type ActorRow } from "@/hooks/v2/useActors";
+import { THEMES, type Theme, useTheme } from "@/hooks/useTheme";
 import { can } from "@/lib/auth-rules";
 import { wsVars } from "@/lib/palette";
 import { cn } from "@/lib/v2-utils";
@@ -12,7 +15,7 @@ import { PasswordChange } from "@/lib/schemas";
 import type { Workstream } from "@/lib/schemas";
 import { Badge } from "./ui/badge";
 import { Button, buttonVariants } from "./ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
@@ -68,9 +71,9 @@ const tempPassword = () => {
 
 const Section = ({ title, desc, action, children }: { title: string; desc?: string; action?: React.ReactNode; children: React.ReactNode }) => (
   <Card className="shadow-sm">
-    <CardHeader className="flex-row items-start justify-between gap-4">
+    <CardHeader className="gap-x-4">
       <div className="grid gap-1.5"><CardTitle>{title}</CardTitle>{desc && <CardDescription>{desc}</CardDescription>}</div>
-      {action}
+      {action && <CardAction>{action}</CardAction>} {/* the header is a grid: without CardAction a button gets its own full-width row */}
     </CardHeader>
     <CardContent>{children}</CardContent>
   </Card>
@@ -343,6 +346,35 @@ function Team({ me }: { me: string }) {
 }
 
 // Backup and restore. The file round-trips everything the app stores except accounts (see /api/export).
+const THEME_LABELS: Record<Theme, string> = { system: "System", light: "Light", dark: "Dark" };
+function Appearance() {
+  const { theme, set } = useTheme();
+  return (
+    <Section title="Appearance" desc="Light, dark, or follow your device's setting. Saved in this browser.">
+      <div className="bg-muted inline-flex rounded-lg p-1" role="radiogroup" aria-label="Theme">
+        {THEMES.map((t) => {
+          const Icon = t === "light" ? Sun : t === "dark" ? Moon : Monitor;
+          return (
+            <button key={t} type="button" role="radio" aria-checked={theme === t} onClick={() => set(t)}
+              className={cn("flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                theme === t ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+              <Icon className="size-4" aria-hidden />{THEME_LABELS[t]}
+            </button>
+          );
+        })}
+      </div>
+    </Section>
+  );
+}
+
+function HistoryLink() {
+  return (
+    <Section title="History" desc="Every task that was completed or deleted, newest first, with filters by workstream, owner and status.">
+      <Link href="/v2/history" className={cn(buttonVariants({ variant: "outline" }), "gap-2")}><HistoryIcon className="size-4" aria-hidden />Open history</Link>
+    </Section>
+  );
+}
+
 function Data({ demo, canImport, onExport, onImport }: { demo: boolean; canImport: boolean; onExport: () => Promise<void>; onImport: (f: File) => Promise<void> }) {
   const [busy, setBusy] = useState<"export" | "import" | null>(null);
   const run = (kind: "export" | "import", p: Promise<void>) => { setBusy(kind); p.finally(() => setBusy(null)); };
@@ -386,11 +418,13 @@ export function Settings({ workstreams, user, demo, permissions, onExport, onImp
       <p className="text-muted-foreground text-sm">Account, workstreams and team</p>
       <div className="mt-6 grid gap-6">
         {demo ? <Card><CardContent className="text-muted-foreground text-sm">Account and team settings need the database; this is demo mode.</CardContent></Card> : <Account />}
+        <Appearance />
         {!demo && can(permissions, "integrations:google") && <Google />}
         {!demo && can(permissions, "integrations:notion") && <Notion />}
         <Workstreams workstreams={workstreams} canCreate={can(permissions, "workstream:create")} canEdit={can(permissions, "workstream:update")} />
         {!demo && can(permissions, "actors:manage") && <People />}
         {!demo && can(permissions, "users:manage") && can(permissions, "roles:read") && <Team me={user?.username ?? ""} />}
+        {!demo && <HistoryLink />}
         <Data demo={demo} canImport={demo || can(permissions, "data:import")} onExport={onExport} onImport={onImport} />
       </div>
     </>

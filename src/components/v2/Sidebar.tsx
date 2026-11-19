@@ -1,5 +1,5 @@
 "use client";
-import { BookText, ChevronRight, History as HistoryIcon, LayoutDashboard, LogOut, Mail, MoreVertical, PanelLeft, Plus, Search, Settings as Cog, SunMoon } from "lucide-react";
+import { BookText, ChevronRight, LayoutDashboard, LogOut, Mail, MoreVertical, PanelLeft, Plus, Search, Settings as Cog } from "lucide-react";
 import Link from "next/link";
 import { Collapsible } from "radix-ui";
 import { fmt, toDay } from "@/lib/date";
@@ -24,8 +24,8 @@ const ROW = "h-8 gap-2.5 rounded-lg px-2.5 text-[13px] text-[var(--side-ink)] [&
 const MATCH: Record<Field, string> = { name: "Matched task name", description: "Matched description", workstream: "Matched workstream", owner: "Matched owner" };
 const TINY = "text-[var(--side-icon)] hover:text-[var(--side-ink-strong)] flex size-5 items-center justify-center rounded-md hover:bg-sidebar-accent focus-visible:ring-2 ring-sidebar-ring outline-hidden";
 
-export function Sidebar({ workstreams, path, user, themeLabel, canCreate, showGoogle, showNotion, onLogout, onPickTask }: {
-  workstreams: Workstream[]; path: string; user?: { username: string; role: string }; themeLabel: string;
+export function Sidebar({ workstreams, path, user, canCreate, showGoogle, showNotion, onLogout, onPickTask }: {
+  workstreams: Workstream[]; path: string; user?: { username: string; role: string };
   canCreate: boolean; showGoogle: boolean; showNotion: boolean; onLogout: () => void; onPickTask: (taskId: string, wsId: string) => void;
 }) {
   const { state, toggleSidebar } = useSidebar();
@@ -82,11 +82,6 @@ export function Sidebar({ workstreams, path, user, themeLabel, canCreate, showGo
                 </SidebarMenuButton>
               </SidebarMenuItem>
             )}
-            <SidebarMenuItem>
-              <SidebarMenuButton asChild isActive={path === "/v2/history"} tooltip="History" className={ROW}>
-                <Link href="/v2/history" aria-current={path === "/v2/history" ? "page" : undefined}><HistoryIcon /><span>History</span></Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
             {showGoogle && (
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={path === "/v2/google"} tooltip="Google" className={ROW}>
@@ -155,14 +150,12 @@ export function Sidebar({ workstreams, path, user, themeLabel, canCreate, showGo
         <SidebarMenu className="gap-0.5">
           {(
             <SidebarMenuItem>
-              <SidebarMenuButton asChild isActive={path === "/v2/settings"} tooltip="Settings" className={ROW}>
+              {/* History lives under Settings now, so Settings stays highlighted there */}
+              <SidebarMenuButton asChild isActive={path === "/v2/settings" || path === "/v2/history"} tooltip="Settings" className={ROW}>
                 <Link href="/v2/settings" aria-current={path === "/v2/settings" ? "page" : undefined}><Cog /><span>Settings</span></Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
           )}
-          <SidebarMenuItem>
-            <SidebarMenuButton id="btnTheme" type="button" tooltip={themeLabel} className={ROW}><SunMoon /><span>{themeLabel}</span></SidebarMenuButton>
-          </SidebarMenuItem>
           {user && (
             <SidebarMenuItem>
               <DropdownMenu>

@@ -2,8 +2,8 @@
 import { useEffect } from "react";
 import { lsStore, useIsClient, useLsValue } from "./storage";
 
-const THEMES = ["system", "light", "dark"] as const;
-type Theme = (typeof THEMES)[number];
+export const THEMES = ["system", "light", "dark"] as const;
+export type Theme = (typeof THEMES)[number];
 const store = lsStore("primecare.theme"); // same key as refer.html; layout.tsx applies it before first paint
 
 export function useTheme() {
@@ -18,7 +18,9 @@ export function useTheme() {
   }, [theme, client]);
 
   return {
-    label: "Theme: " + theme[0].toUpperCase() + theme.slice(1),
+    theme,
+    set: (t: Theme) => store.set(t), // Settings → Appearance (/v2)
+    label: "Theme: " + theme[0].toUpperCase() + theme.slice(1), // the v1 dashboard's cycle button
     cycle: () => store.set(THEMES[(THEMES.indexOf(theme) + 1) % 3]),
   };
 }
