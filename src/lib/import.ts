@@ -1,5 +1,5 @@
 import { PALETTE } from "./palette";
-import { Id, isValidIso, type DashboardData } from "./schemas";
+import { Id, isValidIso } from "./schemas";
 import { STATUSES } from "./status";
 import { MAX_DEPTH, rollupProgress } from "./subtasks";
 
@@ -10,11 +10,19 @@ const str = (v: unknown, max: number) => String(v ?? "").slice(0, max);
 type Loose = Record<string, unknown>;
 const today = () => new Date().toISOString().slice(0, 10);
 
+// Export file format. v1 files (the old client export) are just { workstreams }; v2 adds the rest of the data.
+export const EXPORT_FORMAT = { format: "prime-care", version: 2 } as const;
+
+// A full ISO timestamp, kept so a restore doesn't reset "created" dates (and their sort order) to the import time.
+const stamp = (v: unknown) => (typeof v === "string" && !isNaN(Date.parse(v)) && v.length <= 40 ? new Date(v).toISOString() : undefined);
+const EVENT_TYPES = ["COMPLETED", "DELETED"] as const;
+
 // Lenient like refer.html's normalize(): defaults, clamped progress, repaired dates, palette fallback.
 // Also repairs what the DB CHECK constraints require (milestone start=end, Done=100%).
 // Rejects duplicate ids; drops dependencies on missing tasks.
-export function normalizeImport(raw: unknown): DashboardData {
-  const d = raw as { workstreams?: unknown } | null;
+// v2 extras: `people` (every owner, including ones with no work yet) and `history` (the audit trail, merged by id).
+export function normalizeImport(raw: unknown) {
+  const d = raw as { workstreams?: unknown; people?: unknown; history?: unknown } | null;
   if (!d || !Array.isArray(d.workstreams))
     throw new ImportError("Expected { workstreams: [...] }");
 
@@ -48,6 +56,7 @@ export function normalizeImport(raw: unknown): DashboardData {
       isMilestone,
       dependsOn: Array.isArray(t.dependsOn) ? (t.dependsOn as unknown[]).map(String) : [],
       description: String(t.description ?? ""),
+      createdAt: stamp(t.createdAt),
     };
   };
 
@@ -78,6 +87,7 @@ export function normalizeImport(raw: unknown): DashboardData {
         : PALETTE[i % PALETTE.length],
       owner: str(w.owner, 80),
       goal: str(w.goal, 400),
+      createdAt: stamp(w.createdAt),
       tasks: (Array.isArray(w.tasks) ? (w.tasks as unknown[]) : []).map((t0) => mapTree(t0, null, 0)),
     };
   });
@@ -88,5 +98,22 @@ export function normalizeImport(raw: unknown): DashboardData {
       t.dependsOn = [...new Set(t.dependsOn)].filter(
         (x) => x !== t.id && taskIds.has(x),
       );
-  return { workstreams };
+
+  const people = [...new Set((Array.isArray(d.people) ? (d.people as unknown[]) : []).map((n) => str(n, 80).trim()).filter(Boolean))];
+
+  // History rows are copied as-is (they describe tasks that may no longer exist), so only their shape is checked.
+  const eventIds = new Set<string>();
+  const history = (Array.isArray(d.history) ? (d.history as unknown[]) : []).map((e0, i) => {
+    const e = (e0 ?? {}) as Loose;
+    const id = String(e.id ?? ""), at = stamp(e.at), type = EVENT_TYPES.find((x) => x === e.type);
+    if (!Id.safeParse(id).success || !at || !type || eventIds.has(id)) throw new ImportError(`History entry ${i + 1} is invalid or duplicated`);
+    eventIds.add(id);
+    return {
+      id, type, at, taskId: str(e.taskId, 100), taskName: str(e.taskName, 140), workstreamId: str(e.workstreamId, 100),
+      workstreamName: str(e.workstreamName, 60), owner: str(e.owner, 80), actor: e.actor == null ? null : str(e.actor, 80), note: str(e.note, 400),
+    };
+  });
+  return { workstreams, people, history };
 }
+
+export type NormalizedImport = ReturnType<typeof normalizeImport>;

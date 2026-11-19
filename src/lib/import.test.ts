@@ -69,3 +69,24 @@ test("normalizeImport keeps MAX_DEPTH levels of subtasks and drops deeper ones",
   assert.equal(ids.length, MAX_DEPTH + 1); // depth 0 … MAX_DEPTH
   assert.equal(ids.at(-1), `d${MAX_DEPTH}`);
 });
+
+test("v2 extras: created dates, people and history round-trip; bad history is rejected", () => {
+  const d = normalizeImport({
+    format: "prime-care", version: 2,
+    workstreams: [{ id: "w1", name: "W", createdAt: "2026-01-02T03:04:05.000Z", tasks: [
+      { id: "t1", name: "T", createdAt: "2026-02-03T00:00:00.000Z", subtasks: [{ id: "s1", name: "S", createdAt: "not a date" }] }] }],
+    people: ["Asha", " Asha ", "", "Ravi"],
+    history: [{ id: "e1", type: "COMPLETED", at: "2026-03-01T10:00:00.000Z", taskId: "t9", taskName: "Old", workstreamId: "w1", workstreamName: "W", owner: "Asha", actor: null }],
+  });
+  assert.equal(d.workstreams[0].createdAt, "2026-01-02T03:04:05.000Z");
+  assert.equal(d.workstreams[0].tasks[0].createdAt, "2026-02-03T00:00:00.000Z");
+  assert.equal(d.workstreams[0].tasks[0].subtasks?.[0].createdAt, undefined);
+  assert.deepEqual(d.people, ["Asha", "Ravi"]);
+  assert.equal(d.history[0].taskName, "Old");
+  assert.equal(d.history[0].note, "");
+  assert.deepEqual(normalizeImport({ workstreams: [] }).history, []); // v1 files still work
+  const bad = (history: unknown[]) => assert.throws(() => normalizeImport({ workstreams: [], history }), /History entry 1/);
+  bad([{ id: "e1", type: "EXPLODED", at: "2026-03-01T10:00:00Z" }]);
+  bad([{ id: "e1", type: "DELETED" }]);
+  assert.throws(() => normalizeImport({ workstreams: [], history: [{ id: "e1", type: "DELETED", at: "2026-03-01T10:00:00Z" }, { id: "e1", type: "DELETED", at: "2026-03-01T10:00:00Z" }] }), /History entry 2/);
+});

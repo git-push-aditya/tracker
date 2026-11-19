@@ -1,6 +1,6 @@
 # Google integration via Composio — implementation plan
 
-Status: phases 0–1 built on branch `connectingGoogle` (`@composio/core` pinned at 0.27.0). Tool slugs below are confirmed in the live catalog; argument shapes get checked in phase 2 against a real connected account.
+Status: phases 0–2 built on branch `connectingGoogle` (`@composio/core` pinned at 0.27.0), plus the Gmail part of phase 3: send and reply (plain text, 30 per user per hour, never retried). Email HTML renders in a sandboxed iframe (no scripts, remote images blocked until asked). Mail has folder tabs; Docs and Sheets show owner and a "Shared with me" filter. All checked against a real connected account; sending not yet tested live.
 
 Goal: each logged-in user connects **their own** Google account, then can view and act on Gmail, Calendar, Docs and
 Sheets from inside the tracker. Composio holds the OAuth tokens and runs the Google API calls; no LLM is involved.
@@ -70,11 +70,11 @@ Exit: a user connects Gmail, sees it as connected, disconnects it, and sees it a
 1. **Wrappers**: `src/lib/google.ts`, with one function per need from the phase 0 table (`listMail`, `getThread`, `listEvents`, `listFiles(kind)`, `getDoc`, `getRange`).
    - Each calls `session.execute(slug, args)` and **parses the result with zod** into a small shape. Composio and Google output is untrusted input.
    - Keep payloads small with `max_results`, `include_payload=false` and page tokens.
-   - Error mapping, added to `toResponse` in `src/lib/http.ts` (phase 1 leaves Composio failures as a generic 500):
-     - not connected → 409 `GOOGLE_NOT_CONNECTED`
-     - expired or revoked → 409 `GOOGLE_RECONNECT`
+   - Error mapping lives in `runTool` (`src/lib/google.ts`):
+     - not connected, expired or revoked (Composio `ToolRouterV2_NoActiveConnection`) → 409 `GOOGLE_NOT_CONNECTED`
      - Composio 429 → 429
-     - anything else → 502
+     - tool ran but failed → 502 with the Composio log ID
+     - response shape we don't expect → 502 (never a 400, which would blame our user)
 2. **Routes** (GET, `integrations:google`):
    - `/api/google/mail?q=&page=`
    - `/api/google/mail/[threadId]`
@@ -86,7 +86,7 @@ Exit: a user connects Gmail, sees it as connected, disconnects it, and sees it a
    - A `/v2/google` page with tabs: Mail, Calendar, Docs, Sheets.
    - Hooks live in `src/hooks/v2/useGoogle.ts`.
    - An empty state links to Settings when a toolkit isn't connected; `GOOGLE_RECONNECT` shows a Reconnect button.
-   - **Email HTML is never injected into our DOM.** Render it in `<iframe sandbox srcdoc>` (no `allow-scripts`), with the text/plain part as the fallback.
+   - **Email HTML is never injected into our DOM.** v1 shows Composio's plain-text `messageText` only. If HTML rendering is wanted later, use `<iframe sandbox srcdoc>` (no `allow-scripts`).
    - Docs: plain text view plus an "Open in Google" link. Sheets: show the first range as a table.
 4. **Test**: zod mappers against one saved sample response per tool (fixtures from the phase 0 spike, with personal data scrubbed).
 

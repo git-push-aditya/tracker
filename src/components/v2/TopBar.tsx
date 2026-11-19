@@ -1,10 +1,10 @@
 import { ChevronRight, FileText } from "lucide-react";
 import { SidebarTrigger } from "./ui/sidebar";
 
-const TITLES = { dashboard: "Dashboard", settings: "Settings", history: "History" } as const;
+const TITLES = { dashboard: "Dashboard", settings: "Settings", history: "History", google: "Google" } as const;
 
 // Sticky 52px bar at the top of the content card: page icon + breadcrumb, last segment as a pill.
-export function TopBar({ view, wsName }: { view: "dashboard" | "ws" | "settings" | "history"; wsName?: string }) {
+export function TopBar({ view, wsName }: { view: "dashboard" | "ws" | "settings" | "history" | "google"; wsName?: string }) {
   const trail = view === "ws" ? ["Workstreams", wsName ?? "Not found"] : [TITLES[view]];
   return (
     <div className="bg-[var(--side-card)] border-[var(--side-card-border)] sticky top-0 z-30 font-heading flex h-[52px] shrink-0 items-center gap-2 border-b px-4 text-[13px]">

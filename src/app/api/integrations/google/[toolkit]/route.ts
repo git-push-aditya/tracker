@@ -1,5 +1,6 @@
 import { requireSession } from "@/lib/auth";
 import { composio, removeAccount, userAccounts } from "@/lib/composio";
+import { forgetSession } from "@/lib/google";
 import { GoogleToolkit } from "@/lib/google-toolkits";
 import { handle, HttpError } from "@/lib/http";
 
@@ -7,6 +8,7 @@ import { handle, HttpError } from "@/lib/http";
 export const POST = handle(async (req, ctx: RouteContext<"/api/integrations/google/[toolkit]">) => {
   const s = await requireSession(req, "integrations:google");
   const toolkit = GoogleToolkit.parse((await ctx.params).toolkit);
+  forgetSession(s.user.id); // its connections are about to change
   const accounts = await userAccounts(s.user.id, [toolkit]);
   if (accounts.some((a) => a.status === "ACTIVE")) throw new HttpError(409, "Already connected");
   await Promise.all(accounts.map((a) => removeAccount(a.id))); // stale expired / half-finished attempts
@@ -22,6 +24,7 @@ export const POST = handle(async (req, ctx: RouteContext<"/api/integrations/goog
 export const DELETE = handle(async (req, ctx: RouteContext<"/api/integrations/google/[toolkit]">) => {
   const s = await requireSession(req, "integrations:google");
   const toolkit = GoogleToolkit.parse((await ctx.params).toolkit);
+  forgetSession(s.user.id); // its connections are about to change
   const accounts = await userAccounts(s.user.id, [toolkit]);
   await Promise.all(accounts.map((a) => removeAccount(a.id)));
   return Response.json({ ok: true });

@@ -6,10 +6,11 @@ import { GOOGLE_LABELS, GOOGLE_TOOLKITS, type GoogleStatus, type GoogleToolkit }
 import { ACTORS_KEY, type ActorRow } from "@/hooks/v2/useActors";
 import { can } from "@/lib/auth-rules";
 import { wsVars } from "@/lib/palette";
+import { cn } from "@/lib/v2-utils";
 import { PasswordChange } from "@/lib/schemas";
 import type { Workstream } from "@/lib/schemas";
 import { Badge } from "./ui/badge";
-import { Button } from "./ui/button";
+import { Button, buttonVariants } from "./ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
@@ -286,8 +287,43 @@ function Team({ me }: { me: string }) {
   );
 }
 
-export function Settings({ workstreams, user, demo, permissions }: {
+// Backup and restore. The file round-trips everything the app stores except accounts (see /api/export).
+function Data({ demo, canImport, onExport, onImport }: { demo: boolean; canImport: boolean; onExport: () => Promise<void>; onImport: (f: File) => Promise<void> }) {
+  const [busy, setBusy] = useState<"export" | "import" | null>(null);
+  const run = (kind: "export" | "import", p: Promise<void>) => { setBusy(kind); p.finally(() => setBusy(null)); };
+  return (
+    <Card className="shadow-sm">
+      <CardHeader>
+        <CardTitle>Import and export</CardTitle>
+        <CardDescription>
+          {demo ? "Download or load the workstreams and tasks in this browser session."
+            : "A JSON backup of all workstreams, tasks and subtasks at every level, dependencies, descriptions, people and history. Logins and roles aren't included."}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <Button variant="outline" disabled={!!busy} onClick={() => run("export", onExport())}>{busy === "export" ? "Exporting…" : "Export JSON"}</Button>
+          {canImport && (
+            <label className={cn(buttonVariants({ variant: "outline" }), busy ? "pointer-events-none opacity-50" : "cursor-pointer")}>
+              {busy === "import" ? "Importing…" : "Import JSON"}
+              <input type="file" accept="application/json,.json" className="sr-only" disabled={!!busy}
+                onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) run("import", onImport(f)); }} />
+            </label>
+          )}
+        </div>
+        {canImport && (
+          <p className="text-muted-foreground text-xs">
+            Importing <b>replaces</b> every workstream and task with the file&apos;s. {!demo && "People are added if missing, and history entries are merged in, never removed."} Export first if you might want the current data back.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+export function Settings({ workstreams, user, demo, permissions, onExport, onImport }: {
   workstreams: Workstream[]; user?: { username: string; role: string }; demo: boolean; permissions: string[];
+  onExport: () => Promise<void>; onImport: (f: File) => Promise<void>;
 }) {
   return (
     <>
@@ -299,6 +335,7 @@ export function Settings({ workstreams, user, demo, permissions }: {
         <Workstreams workstreams={workstreams} canCreate={can(permissions, "workstream:create")} canEdit={can(permissions, "workstream:update")} />
         {!demo && can(permissions, "actors:manage") && <People />}
         {!demo && can(permissions, "users:manage") && can(permissions, "roles:read") && <Team me={user?.username ?? ""} />}
+        <Data demo={demo} canImport={demo || can(permissions, "data:import")} onExport={onExport} onImport={onImport} />
       </div>
     </>
   );

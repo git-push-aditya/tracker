@@ -11,7 +11,7 @@ export const POST = handle(async (req) => {
   const raw = await req.json().catch(() => {
     throw new HttpError(400, "Body must be valid JSON");
   });
-  const { workstreams } = (() => {
+  const { workstreams, people: extraPeople, history } = (() => {
     try {
       return normalizeImport(raw);
     } catch (e) {
@@ -34,15 +34,16 @@ export const POST = handle(async (req) => {
       await logTaskEvents(tx, "DELETED", session?.user.username ?? null, old.filter((t) => !keep.has(t.id)), "Removed by import");
       await tx.workstream.deleteMany(); // cascades tasks and dependencies
       // owners in the file become actors (find-or-create), so an import can't reintroduce duplicate spellings
-      const people = await resolveMany(tx, [...workstreams.map((w) => w.owner), ...flat.map((f) => f.t.owner)]);
+      // plus the file's people list, so owners with no work yet survive a restore
+      const people = await resolveMany(tx, [...extraPeople, ...workstreams.map((w) => w.owner), ...flat.map((f) => f.t.owner)]);
       const who = (name: string) => { const a = people.get(actorKey(name)); return { owner: a?.name ?? "", ownerId: a?.id ?? null }; };
       await tx.workstream.createMany({
-        data: workstreams.map((w, position) => ({ id: w.id, name: w.name, color: w.color, ...who(w.owner), goal: w.goal, position })),
+        data: workstreams.map((w, position) => ({ id: w.id, name: w.name, color: w.color, ...who(w.owner), goal: w.goal, position, createdAt: w.createdAt })),
       });
       const row = ({ w, t, position, parentId }: Flat) => ({
         id: t.id, workstreamId: w.id, parentId, name: t.name, ...who(t.owner),
         start: new Date(t.start), end: new Date(t.end), progress: t.progress,
-        status: statusToDb(t.status), isMilestone: t.isMilestone, description: t.description, position,
+        status: statusToDb(t.status), isMilestone: t.isMilestone, description: t.description, position, createdAt: t.createdAt,
       });
       // one level at a time, so each subtask's parent already exists (the FK)
       for (let depth = 0; flat.some((f) => f.depth === depth); depth++)
@@ -50,8 +51,14 @@ export const POST = handle(async (req) => {
       await tx.taskDependency.createMany({
         data: flat.flatMap(({ t }) => t.dependsOn.map((dependsOnId) => ({ taskId: t.id, dependsOnId }))),
       });
+      // History is an audit trail: merged, never replaced. Rows already here (same id) are left alone, so
+      // re-importing a backup doesn't duplicate it. Owners link to an existing person by name, else none.
+      await tx.taskEvent.createMany({
+        data: history.map((e) => ({ ...e, at: new Date(e.at), ownerId: people.get(actorKey(e.owner))?.id ?? null })),
+        skipDuplicates: true,
+      });
     },
-    { timeout: 20000 },
+    { timeout: 30000 },
   );
-  return Response.json({ ok: true, workstreams: workstreams.length, tasks: flat.length });
+  return Response.json({ ok: true, workstreams: workstreams.length, tasks: flat.length, history: history.length });
 });

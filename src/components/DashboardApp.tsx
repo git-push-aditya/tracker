@@ -199,7 +199,7 @@ function Board({ source, workstreams, today, ui, setUi, theme, me, reset }: {
     try { d = normalizeImport(JSON.parse(await file.text())); }
     catch { alert("That file isn't valid dashboard JSON. It needs a top-level \"workstreams\" array."); return; }
     if (!confirm(`Replace the current data with ${d.workstreams.length} workstreams from "${file.name}"?`)) return;
-    importData.mutate(d.workstreams); requestToday(); toast("Imported " + file.name);
+    importData.mutate(d); requestToday(); toast("Imported " + file.name);
   }
   async function resetSample() {
     if (!confirm("Replace all current data with the built-in sample data? Export first if you want to keep your changes.")) return;

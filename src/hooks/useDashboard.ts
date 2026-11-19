@@ -1,4 +1,5 @@
 "use client";
+import type { NormalizedImport } from "@/lib/import";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/lib/api";
 import { findTask } from "@/lib/dashboard";
@@ -114,9 +115,10 @@ export const useSaveWorkstream = () =>
 export const useDeleteWorkstream = () =>
   useEdit<string>({ optimistic: removeWorkstream, local: () => undefined, remote: (id) => api("DELETE", `/api/workstreams/${id}`) });
 
+// Takes a normalized file (normalizeImport). Demo mode keeps only the workstreams; the DB also restores people and history.
 export const useImport = () =>
-  useEdit<Workstream[]>({
-    optimistic: (_, v) => v,
+  useEdit<NormalizedImport>({
+    optimistic: (_, v) => v.workstreams,
     local: () => undefined,
-    remote: (v) => api("POST", "/api/import", { workstreams: v }),
+    remote: (v) => api("POST", "/api/import", v),
   });
