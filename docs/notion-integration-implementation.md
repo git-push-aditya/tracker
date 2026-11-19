@@ -1,6 +1,6 @@
 # Notion integration via Notion MCP: implementation plan
 
-Status: plan only. The Google integration is on branch `connectingGoogle`; Notion uses a different route (see §0).
+Status: phase 0 spike done on 2026-11-19 (findings below); phases 1–4 not started. The Google integration is on branch `connectingGoogle`; Notion uses a different route (see §0).
 
 Goal: each logged-in user connects **their own** Notion workspace with a single "Allow" click. They can then:
 - browse, search and read **every page they can see in Notion**, including pages created after connecting;
@@ -24,58 +24,53 @@ Costs of this route:
 | # | Question | Default | Why |
 |---|---|---|---|
 | N1 | How we talk to Notion | `@modelcontextprotocol/client@2` (2.4.0 on npm today, exact pin), Streamable HTTP to `mcp.notion.com/mcp`, protocol version pinned to `2026-07-28` | Notion's recommended client. One new dependency |
-| N2 | App registration | **Dynamic client registration**, run once per redirect URI (dev and prod differ) and stored in our DB | Notion: re-registering "orphans prior grants", so the registration must persist |
+| N2 | App identity | **Client ID metadata document**: we serve `/oauth/notion-client.json` (name, redirect URIs) and its HTTPS URL **is** our `client_id`. Notion advertises `client_id_metadata_document_supported: true`. Local dev, which has no public URL, uses a one-time dynamic registration with a `localhost` redirect, kept in `.env` as `NOTION_CLIENT_ID`. Code: `client_id = process.env.NOTION_CLIENT_ID ?? <origin>/oauth/notion-client.json` | One fixed identity per environment, so Enterprise admins always approve the same "Prime Care Tracker". No registration table, and no risk of re-registering and "orphaning prior grants" |
 | N3 | Token storage | New `NotionConnection` table, one row per user, with access and refresh tokens **encrypted with AES-256-GCM** (`node:crypto`) using a key from `NOTION_TOKEN_KEY` | Notion requires tokens on the server and encrypted at rest. No new dependency |
 | N4 | Refresh | Access tokens last about 8 hours; read `expires_in` instead of assuming. Refresh within 60 seconds of expiry, **inside a Postgres row lock** (`SELECT … FOR UPDATE`), and save the rotated refresh token in the same transaction | Each refresh rotates the token. Two refreshes at once, or reusing a rotated token, can **revoke the whole grant**. Vercel runs many server instances, so an in-memory lock isn't enough |
 | N5 | Ended grants | `invalid_grant` is final: delete the row and return 409 `NOTION_RECONNECT`. Never retry | Notion's guidance. Refresh tokens also expire 180 days after authorization at the latest, so users reconnect about twice a year |
 | N6 | Permission | New `integrations:notion` | Separate from Google |
 | N7 | Rendering pages | `react-markdown` + `remark-gfm`, with raw HTML left off (the default) | Pages come back as Notion-flavoured markdown. Raw HTML off means page content can't inject markup |
-| N8 | Creating pages | The MCP create-page tool with title and markdown content. **Parent is optional**: no parent puts the page in the user's private pages (confirm in phase 0), and a parent picker is offered | Matches "write it here, it appears in their Notion" |
+| N8 | Creating pages | `notion-create-pages` with title and markdown. **Default `creation_mode: "draft"`**, a private page in their workspace (confirmed), with an optional parent picker | Matches "write it here, it appears in their Notion" |
 | N9 | Editing, moving or deleting existing pages | Not in scope | Not requested; these are the destructive tools |
 | N10 | Demo mode | Feature off | Same as Google |
 | N11 | Workspaces per user | One | Several = several rows; add when someone needs it |
 
 ## 2. Phases
 
-### Phase 0: spike (scratchpad script, not committed)
+### Phase 0: spike (done 2026-11-19)
 
-A Node script that does the full flow against one test workspace:
-- registers our app (dynamic client registration);
-- signs in with PKCE (S256) and `resource=https://mcp.notion.com/mcp`, using a local redirect;
-- exchanges the code;
-- runs `tools/list`;
-- calls the search, fetch, get-self and create-page tools;
-- refreshes once.
+A scratchpad script (not committed) ran the full flow against a real, non-Business workspace:
+- dynamic registration;
+- PKCE sign-in with a `localhost` redirect;
+- `tools/list`;
+- listing, search, fetch and create;
+- a refresh.
 
-It prints **tool names, input schemas, and result shapes, keys and counts only**, never page content. It saves one scrubbed fixture per tool for tests.
+Only shapes and counts were printed. One test page, "Prime Care test page (safe to delete)", was created as a private draft.
 
-Things to confirm and write into this doc:
-1. The exact tool names and arguments. Named in Notion's docs: `notion-search`, `notion-fetch`, `notion-get-self`, `notion-get-users`. The create tool is expected to be `notion-create-pages`.
-2. **Search format**:
-   - Is each result's ID, title, URL and last-edited time machine-readable (JSON in the text), or does it need parsing?
-   - Does an empty query list recent pages?
-   - Can results be limited to Notion only, excluding connected Slack or Drive sources?
-3. **Create without a parent**: where does the page land, and does the result return its URL?
-4. Whether `http://localhost` redirect URIs are accepted for development (production must be HTTPS).
-5. Whether the consent screen lets the user choose which workspace, and how get-self reports it.
-6. What a rate limit looks like, and whether a revoke or disconnect endpoint is advertised in the server metadata.
+| Question | Finding |
+|---|---|
+| Sign-in | One Allow screen, no page picker. `localhost` redirect accepted. The token response already includes `workspace_name`, `workspace_id`, `workspace_icon` and `user_id`, so there's **no extra call for the workspace name** |
+| Tokens | `expires_in` 28800 (8 hours). Refresh works and **rotates** the refresh token. Replaying the previous refresh token right away was still accepted (a grace window), but keep the N4 lock: Notion documents revocation on replay |
+| Result format | Read tools return **`structuredContent` JSON**, with the same JSON also in the text part. No text parsing needed. Search adds a `notices` array (plan upsell messages), which we ignore |
+| Listing pages | Dedicated tools, all `{ limit ≤200, cursor }` → `{ results: [{ type: "page"\|"database", url, title, icon }] }`. There's no `id` field; the 32-hex ID is in the URL (`app.notion.com/p/<id>`):<br>• `notion-list-recent-pages` (recently **viewed**)<br>• `notion-list-private-pages`<br>• `notion-list-shared-pages`<br>• `notion-list-favorite-pages` |
+| Search | `notion-search { query, query_type: "internal", page_size }` → `{ results: [{ id, title, url, type, highlight, timestamp }], type }`. Notion only, not connected apps. **The query must be non-empty.** `sort` and `filters` need a Business or Enterprise plan and are silently dropped otherwise, so "browse everything by last edited" isn't available on Free or Plus. The listing tools cover browsing |
+| Reading | `notion-fetch { id: <url or id> }` → `{ title, url, text, icon: { emoji }, page_last_edited_at, metadata: { type } }`. `text` is Notion-flavoured markup: `<page><ancestor-path>…<properties>…<content>MARKDOWN</content>`. Take the `<content>` part and drop Notion's custom tags before rendering |
+| Creating | `notion-create-pages { creation_mode: "draft", pages: [{ properties: { title }, content: markdown }] }` creates a **private workspace-level page**, or pass `parent: { page_id }` instead of draft mode. It returns `{ pages: [{ id, url }] }`, took about 1s, and the page appeared **immediately** in the private list and in search, with no lag |
+| Speed | MCP connect about 1.2s, then about 350–450ms per call. The connect cost matters, so cache the connection (phase 2) |
+| Revocation | `POST https://mcp.notion.com/token` with `token` + `token_type_hint` + `client_id` returns 200, and the access token is refused (401) straight after. Disconnect uses this |
+| Danger | The server also exposes `notion-update-page`, `notion-delete-pages`, `notion-move-pages` and about 60 other tools. **Our wrapper allow-lists the tools it may call** (the list, search, fetch and create tools above) |
+
+Not tested: rate-limit responses, the workspace chooser for users in several workspaces, and Enterprise admin approval (§3).
 
 ### Phase 1: connect and disconnect
 
 1. **Schema** (Prisma migration):
    ```prisma
-   model OAuthClient {          // our dynamic client registration, kept forever
-     id           String @id @default(cuid())
-     issuer       String
-     redirectUri  String
-     clientId     String
-     clientSecret String?       // encrypted if issued
-     @@unique([issuer, redirectUri])
-   }
    model NotionConnection {
      userId       String   @id
      user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-     workspace    String   // name from get-self, for Settings
+     workspace    String   // workspace_name from the token response, for Settings
      accessToken  String   // AES-256-GCM, "iv.tag.ciphertext" base64
      refreshToken String
      expiresAt    DateTime
@@ -88,14 +83,14 @@ Things to confirm and write into this doc:
    - The key comes from `NOTION_TOKEN_KEY` (32 bytes, base64); a missing key gives 503 "Notion isn't configured".
    - One test: round-trip, a tampered value is rejected, and a wrong key is rejected.
 3. **Routes**:
+   - `GET /oauth/notion-client.json` (public, static): `{ client_id: <its own URL>, client_name: "Prime Care Tracker", client_uri, logo_uri, redirect_uris: [<origin>/api/integrations/notion/callback], grant_types: ["authorization_code","refresh_token"], response_types: ["code"], token_endpoint_auth_method: "none" }`.
    - `POST /api/integrations/notion` (`integrations:notion`):
-     - registers us if needed, using the MCP SDK's discovery;
      - creates `state` and a PKCE verifier and puts them in an **httpOnly, SameSite=Lax cookie** (10 minutes, holding the user ID);
      - returns `{ redirectUrl }`.
    - `GET /api/integrations/notion/callback`:
      - requires the logged-in session;
      - checks `state` against the cookie and that the cookie's user is the current user, then clears the cookie;
-     - exchanges the code **on the server**, calls get-self for the workspace name, then upserts `NotionConnection`;
+     - exchanges the code **on the server**, takes `workspace_name` from the token response, then upserts `NotionConnection`;
      - redirects to `/v2/settings?connected=notion`.
 
      This GET changes data. The checks on `state`, PKCE and the session are the cross-site protection, because `authorize()`'s same-origin check only covers non-GET requests.
@@ -103,7 +98,7 @@ Things to confirm and write into this doc:
    - `DELETE /api/integrations/notion` revokes the token if Notion advertises a way to, then deletes the row.
 4. **Permission**: `"integrations:notion": "Connect their own Notion workspace"` in `src/lib/permissions.ts`.
 5. **Settings**: a Notion row in the "Connected accounts" card, showing the workspace name and a Connect / Disconnect / Reconnect button.
-   - If Notion refuses because the user is a guest or the client isn't approved, show its message, with "Ask your Notion admin to approve <redirect URL>" for the second case.
+   - If Notion refuses because the user is a guest or the client isn't approved, show its message. For the second case, add "Your Notion admin needs to approve Prime Care Tracker", plus the address to approve and a link to the admin note (§3).
 
 Exit: connect with one Allow click, see the workspace name, disconnect. Tokens in the DB are unreadable without the key.
 
@@ -112,7 +107,8 @@ Exit: connect with one Allow click, see the workspace name, disconnect. Tokens i
 1. **`src/lib/notion.ts`**:
    - `notionTool(userId, name, args)`:
      - loads the row and refreshes it if it's close to expiry (the N4 lock);
-     - opens an MCP client with `Authorization: Bearer <access>`, calls the tool and closes the client;
+     - **refuses any tool not on the allow-list** (the four list tools, `notion-search`, `notion-fetch`, `notion-create-pages`);
+     - uses an MCP client with `Authorization: Bearer <access>`, **cached per user per server instance** (connect costs about 1.2s) and rebuilt when the token changes;
      - maps errors:
        - 401 → refresh once, then 409 `NOTION_RECONNECT`
        - rate limit → 429
@@ -120,13 +116,14 @@ Exit: connect with one Allow click, see the workspace name, disconnect. Tokens i
        - unexpected shape → 502 via an `upstream()` helper, the same one Google uses (move it to a shared file)
      - **never logs arguments or results**.
 
-     `// ponytail:` note: one MCP connection per call. Cache a client per user per server instance if the handshake shows up in timings.
-   - `searchPages(q, cursor?)` returns `{ id, title, icon, url, lastEdited, kind }[]`.
-   - `getPage(id)` returns `{ title, url, markdown }`. Databases come back as their rows in markdown and render as a table.
+   - `listPages(folder, cursor?)`, where `folder` is `recent | private | shared | favorites`, returns `{ id (taken from the URL), title, icon, url, kind }[]` plus a cursor.
+   - `searchPages(q)` returns the same fields plus `lastEdited`. The query must be non-empty.
+   - `getPage(id)` returns `{ title, url, icon, lastEdited, markdown }`, with markdown taken from `<content>` and custom tags stripped. Databases return data-source tags; v1 shows "Open in Notion" for those.
    - Mappers are zod schemas written against the phase 0 fixtures.
 2. **Routes** (GET, `integrations:notion`): `/api/notion?q=&cursor=` and `/api/notion/pages/[id]`. The ID is checked as a Notion UUID (32 hex characters, with or without dashes).
 3. **UI**: a `/v2/notion` page with a sidebar entry and a `TopBar` title.
-   - A search box over a list showing Name (icon + title), Type and Last edited.
+   - **Folder tabs like Gmail's**: Recent, Private, Shared, Favorites, plus a search box (search replaces the tab list while a query is typed).
+   - A list showing Name (icon + title) and Type, plus Last edited in search results. "Load more" uses the cursor.
    - Opening a page shows the title, "Open in Notion" and the markdown rendered with `react-markdown`. Links open in a new tab with `noopener`; Notion's custom tags are dropped.
    - Not-connected and reconnect states link to Settings, same as Google.
 4. **Tests**: mappers against the fixtures, plus the refresh decision as a pure function (refresh or not, given `expiresAt` and now).
@@ -141,10 +138,10 @@ Exit: a connected user searches their workspace, sees a page created in Notion a
    - **No retry.** A timeout may still have created the page, so return "Couldn't confirm. Check Notion before retrying".
    - Per-user cap: generalise `takeSend` in `google.ts` to a key per action, e.g. 30 pages per hour.
 2. **"New page" UI**, styled like the redesigned Compose card:
-   - "New page" header, a title line, and an optional **"In: Private ▾"** parent picker that searches pages.
+   - "New page" header, a title line, and an optional **"In: Private ▾"** parent picker. Default is private (draft mode); the picker searches pages.
    - A large markdown body with a Write / Preview toggle (Preview uses the phase 2 renderer).
    - "Create in Notion" button and a discard button.
-   - On success: toast "Created in Notion" with an Open link, and the new page goes to the top of the list immediately.
+   - On success: toast "Created in Notion" with an Open link, and the Private tab refetches (Notion shows the page immediately).
 
 Exit: a user writes a page in the app and it appears in their Notion, in their private pages or under a chosen parent, with the formatting intact.
 
@@ -154,13 +151,26 @@ Exit: a user writes a page in the app and it appears in their Notion, in their p
 - `NOTION_TOKEN_KEY` goes in `.env.example` (blank) and Vercel. Rotating the key means every user reconnects; that's acceptable at this size.
 - Revoking in Notion (Settings, then Connections) shows up as `NOTION_RECONNECT` on the next call, and Reconnect works.
 - Composio outages don't affect Notion and the other way round.
+- Revoke on disconnect through the advertised revocation endpoint (`https://mcp.notion.com/token`).
 - Add setup to the README, and update this status line.
 
 ### Phase 5: hand to the agent
 
 The Cohere agent (planned next) calls the same `notionTool` with search, fetch and create. MCP tools are built for agents, so no extra wrappers are needed; create stays behind the same confirmation card as sending email.
 
-## 3. Not planned
+## 3. Enterprise workspaces
+
+- **Unrestricted Enterprise:** no extra work; members connect like anyone else.
+- **"Approved MCP clients only":** the workspace admin adds our app once in Notion's admin MCP settings, identified by our production redirect `https://<our-domain>/api/integrations/notion/callback`, and members can then connect.
+- **Our side** (about half a day):
+  - a fixed HTTPS production domain, never a preview URL;
+  - the metadata document (N2), so the name and address the admin sees never change;
+  - the "needs admin approval" message (phase 1);
+  - `docs/notion-admin-note.md`, a one-page note for IT: what we access (pages the user can see, and creating pages), that tokens are encrypted on our server and deleted on disconnect, and that we never store page content.
+- **Guests** can't use Notion MCP at all; Settings says so.
+- **Testing** the approval flow needs an Enterprise workspace (a trial, or a customer admin). Everything else is tested on a normal workspace.
+
+## 4. Not planned
 
 - Editing, appending to, moving or deleting existing pages (N9).
 - Database rows as structured data, or syncing tasks to a Notion database.
