@@ -86,7 +86,7 @@ export async function notionTool(userId: string, wsId: string | undefined, origi
       if (/HTTP 401|Unauthorized/i.test(msg)) throw new HttpError(409, "Reconnect this Notion workspace in Settings", "NOTION_RECONNECT");
       if (/HTTP 429/.test(msg)) throw new HttpError(429, "Too many Notion requests, try again in a minute");
       console.error(name, msg.slice(0, 200)); // never args or results: they hold page content
-      throw new HttpError(502, "Notion is unavailable");
+      throw new HttpError(502, "Notion is unavailable", "NOTION_UNAVAILABLE"); // may or may not have run
     }
     if (r.isError) {
       console.error(name, "returned an error"); // the text may quote page content, so it goes to the user, not the log
@@ -143,4 +143,21 @@ export function toPage(data: unknown) {
   const d = upstream(Fetched, data);
   const content = d.text.match(/<content>([\s\S]*)<\/content>/)?.[1] ?? d.text;
   return { title: d.title?.trim() || "Untitled", url: d.url ?? "", icon: d.icon?.emoji ?? "", edited: d.page_last_edited_at ?? "", kind: kindOf(d.metadata.type), markdown: content.trim() };
+}
+
+// --- Creating ------------------------------------------------------------------------------------------------------
+export const NewPage = z.object({
+  ws: z.string().max(40).optional(),
+  title: z.string().trim().min(1, "Give the page a title").max(200),
+  markdown: z.string().max(100_000).default(""),
+  parentId: NotionId.optional(), // a page to put it under; omitted = a private page in the workspace (Notion's draft mode)
+});
+export const createArgs = ({ title, markdown, parentId }: z.infer<typeof NewPage>) => ({
+  ...(parentId ? { parent: { type: "page_id", page_id: parentId } } : { creation_mode: "draft" }),
+  pages: [{ properties: { title }, content: markdown }],
+});
+const Created = z.object({ pages: z.array(z.object({ id: z.string(), url: z.string() })).min(1) });
+export function toCreated(data: unknown) {
+  const p = upstream(Created, data).pages[0];
+  return { id: p.id.replace(/-/g, ""), url: p.url };
 }

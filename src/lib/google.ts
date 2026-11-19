@@ -2,6 +2,7 @@ import { z } from "zod";
 import { composio } from "./composio";
 import { GOOGLE_TOOLKITS } from "./google-toolkits";
 import { HttpError } from "./http";
+import { takeQuota } from "./quota";
 
 // Runs one Composio tool as this user and returns its `data`. Composio/Google output is untrusted: every caller
 // parses it with a schema below before it reaches the browser.
@@ -139,10 +140,5 @@ export const ReplyMail = z.object({ to: Emails.min(1), body: z.string().min(1).m
 
 // Caps damage from a stolen session or a buggy client. Google's own limit (~500/day) still applies on top.
 // ponytail: per-process memory like the session cache; a DB counter if we run several instances.
-const SEND_CAP = 30, HOUR = 3_600_000, sends = new Map<string, number[]>();
-export function takeSend(userId: string, now = Date.now()) {
-  const recent = (sends.get(userId) ?? []).filter((t) => now - t < HOUR);
-  if (recent.length >= SEND_CAP) throw new HttpError(429, `Send limit reached (${SEND_CAP} per hour), try again later`);
-  sends.set(userId, [...recent, now]);
-}
+export const takeSend = (userId: string, now = Date.now()) => takeQuota(`gmail-send:${userId}`, 30, "Send", now);
 export const params = (req: Request) => Object.fromEntries(new URL(req.url).searchParams);

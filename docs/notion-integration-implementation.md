@@ -1,6 +1,6 @@
 # Notion integration via Notion MCP: implementation plan
 
-Status: phase 0 spike done on 2026-11-19 (findings below). Phase 1 built: connect several workspaces, disconnect, Settings card. Phase 2 built: /v2/notion with workspace dropdown, Recent/Private/Shared/Favorites, search, page reader (react-markdown + rehype-raw + rehype-sanitize). Phases 3–4 not started. The Google integration is on branch `connectingGoogle`; Notion uses a different route (see §0).
+Status: phase 0 spike done on 2026-11-19 (findings below). Phase 1 built: connect several workspaces, disconnect, Settings card. Phase 2 built: /v2/notion with workspace dropdown, Recent/Private/Shared/Favorites, search, page reader (react-markdown + rehype-raw + rehype-sanitize). Phase 3 built: "New page" (private by default or under a searched parent, Write/Preview, 30 per user per hour, never retried). Phase 4 not started; phases 1–3 not yet tried end to end against a real workspace in the app. The Google integration is on branch `connectingGoogle`; Notion uses a different route (see §0).
 
 Goal: each logged-in user connects **their own** Notion workspace with a single "Allow" click. They can then:
 - browse, search and read **every page they can see in Notion**, including pages created after connecting;

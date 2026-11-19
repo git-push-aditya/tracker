@@ -1,6 +1,6 @@
 "use client";
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { ExternalLink } from "lucide-react";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ChevronDown, ExternalLink, FilePlus2, Lock, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
@@ -8,6 +8,8 @@ import rehypeRaw from "rehype-raw";
 import rehypeSanitize from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
 import { api, ApiError } from "@/lib/api";
+import { emitToast } from "@/lib/toast";
+import { cn } from "@/lib/v2-utils";
 import { Button } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
 import { Input } from "./ui/input";
@@ -89,13 +91,102 @@ function PageView({ ws, item, onBack }: { ws: string; item: Item; onBack: () => 
   );
 }
 
+// Where the new page goes: private (Notion's draft mode, the default) or under a page found by search.
+function ParentPicker({ ws, value, onChange }: { ws: string; value: Item | null; onChange: (v: Item | null) => void }) {
+  const [open, setOpen] = useState(false), [q, setQ] = useState(""), [term, setTerm] = useState("");
+  const found = useQuery({
+    queryKey: ["notion", ws, "search", term], enabled: open && !!term, ...fresh,
+    queryFn: () => api<{ items: Item[] }>("GET", `/api/notion?${new URLSearchParams({ ws, q: term })}`),
+  });
+  const choose = (v: Item | null) => { onChange(v); setOpen(false); };
+  return (
+    <div className="border-b">
+      <div className="flex items-center gap-3 px-4 py-2.5 text-sm">
+        <span className="text-muted-foreground w-14 shrink-0">In</span>
+        <button type="button" aria-expanded={open} onClick={() => setOpen(!open)}
+          className="hover:bg-accent inline-flex max-w-full items-center gap-1.5 rounded-md px-2 py-0.5 font-medium">
+          {value ? <><Icon icon={value.icon} /><span className="truncate">{value.title}</span></> : <><Lock className="size-3.5" aria-hidden />Private</>}
+          <ChevronDown className="text-muted-foreground size-3.5" aria-hidden />
+        </button>
+      </div>
+      {open && (
+        <div className="bg-muted/30 border-t px-4 py-3">
+          <div className="flex gap-2">
+            <Input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search for a parent page" aria-label="Search for a parent page" maxLength={200}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); setTerm(q.trim()); } }} />
+            <Button type="button" variant="outline" onClick={() => setTerm(q.trim())}>Find</Button>
+          </div>
+          <ul className="mt-2 max-h-56 overflow-y-auto text-sm">
+            <li><button type="button" className="hover:bg-accent flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left" onClick={() => choose(null)}>
+              <Lock className="size-3.5" aria-hidden />Private <span className="text-muted-foreground text-xs">(only you, in your workspace)</span></button></li>
+            {found.isFetching && <li className="text-muted-foreground px-2 py-1.5">Searching…</li>}
+            {found.error && <li className="px-2 py-1.5"><Problem error={found.error} /></li>}
+            {found.data?.items.filter((i) => i.kind === "page").map((i) => (
+              <li key={i.id}><button type="button" className="hover:bg-accent flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left" onClick={() => choose(i)}>
+                <Icon icon={i.icon} /><span className="truncate">{i.title}</span></button></li>
+            ))}
+            {found.data && !found.data.items.some((i) => i.kind === "page") && <li className="text-muted-foreground px-2 py-1.5">No pages found.</li>}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Write a page here; it's saved straight into the user's Notion. Never retried (see the API route).
+function NewPage({ ws, onClose, onCreated }: { ws: string; onClose: () => void; onCreated: (it: Item) => void }) {
+  const qc = useQueryClient();
+  const [parent, setParent] = useState<Item | null>(null), [title, setTitle] = useState(""), [body, setBody] = useState(""), [preview, setPreview] = useState(false);
+  const create = useMutation({
+    mutationFn: () => api<{ id: string; url: string }>("POST", "/api/notion/pages", { ws, title, markdown: body, ...(parent && { parentId: parent.id }) }),
+    onSuccess: (r) => {
+      emitToast(parent ? `Created in Notion under ${parent.title}` : "Created in Notion (private)");
+      void qc.invalidateQueries({ queryKey: ["notion", ws] });
+      onCreated({ id: r.id, url: r.url, title: title.trim(), icon: "", kind: "page", edited: "" });
+    },
+  });
+  const tab = (on: boolean) => cn("rounded-md px-2.5 py-1 text-xs font-medium", on ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground");
+  return (
+    <form className="bg-card mx-auto w-full max-w-3xl overflow-hidden rounded-xl border shadow-sm" onSubmit={(e) => { e.preventDefault(); create.mutate(); }}>
+      <header className="bg-muted/50 flex items-center gap-2 border-b py-1.5 pr-1.5 pl-4">
+        <FilePlus2 className="text-muted-foreground size-4" aria-hidden />
+        <h2 className="text-sm font-semibold">New Notion page</h2>
+        <Button type="button" variant="ghost" size="icon" className="ml-auto size-8" aria-label="Close" onClick={onClose}><X className="size-4" /></Button>
+      </header>
+      <ParentPicker ws={ws} value={parent} onChange={setParent} />
+      <input value={title} onChange={(e) => setTitle(e.target.value)} required autoFocus maxLength={200} placeholder="Untitled" aria-label="Page title"
+        className="placeholder:text-muted-foreground/50 m-0 block w-full appearance-none border-0 bg-transparent px-4 pt-5 pb-2 text-2xl font-bold shadow-none outline-none" />
+      <div className="flex items-center gap-2 px-4">
+        <div className="bg-muted inline-flex rounded-lg p-0.5" role="tablist" aria-label="Editor mode">
+          <button type="button" role="tab" aria-selected={!preview} className={tab(!preview)} onClick={() => setPreview(false)}>Write</button>
+          <button type="button" role="tab" aria-selected={preview} className={tab(preview)} onClick={() => setPreview(true)}>Preview</button>
+        </div>
+        <span className="text-muted-foreground hidden text-xs sm:inline">Markdown: # heading, - list, - [ ] to-do, **bold**, | table |</span>
+      </div>
+      {preview
+        ? <div className="min-h-64 px-4 py-3">{body.trim() ? <NotionMarkdown markdown={body} /> : <p className="text-muted-foreground text-sm">Nothing to preview yet.</p>}</div>
+        : <textarea value={body} onChange={(e) => setBody(e.target.value)} aria-label="Page content" rows={14} maxLength={100_000} placeholder="Start writing…"
+            className="placeholder:text-muted-foreground/70 m-0 block min-h-64 w-full resize-y border-0 bg-transparent px-4 py-3 align-top font-mono text-sm leading-relaxed shadow-none outline-none" />}
+      {create.error && <div className="px-4 pb-2"><Problem error={create.error} /></div>}
+      <div className="flex items-center gap-3 border-t px-4 py-3">
+        <Button type="submit" disabled={create.isPending || !title.trim()} className="gap-2 px-5">
+          <FilePlus2 className="size-4" aria-hidden />{create.isPending ? "Creating…" : "Create in Notion"}
+        </Button>
+        <span className="text-muted-foreground hidden text-xs sm:inline">{parent ? `Saved under “${parent.title}”` : "Saved as a private page in your workspace"}</span>
+        <Button type="button" variant="ghost" size="icon" className="text-muted-foreground ml-auto" aria-label="Discard page" onClick={onClose}><Trash2 className="size-4" /></Button>
+      </div>
+    </form>
+  );
+}
+
 function Browser({ ws }: { ws: string }) {
-  const [folder, setFolder] = useState<Folder>("recent"), [q, setQ] = useState(""), [open, setOpen] = useState<Item | null>(null);
+  const [folder, setFolder] = useState<Folder>("recent"), [q, setQ] = useState(""), [open, setOpen] = useState<Item | null>(null), [writing, setWriting] = useState(false);
   const list = useInfiniteQuery({
     queryKey: ["notion", ws, q ? "search" : folder, q], initialPageParam: "", ...fresh,
     queryFn: ({ pageParam }) => api<{ items: Item[]; cursor: string | null }>("GET", `/api/notion?${new URLSearchParams({ ws, folder, q, ...(pageParam && { cursor: pageParam }) })}`),
     getNextPageParam: (last) => last.cursor ?? undefined,
   });
+  if (writing) return <NewPage ws={ws} onClose={() => setWriting(false)} onCreated={(it) => { setWriting(false); setOpen(it); }} />;
   if (open) return <PageView ws={ws} item={open} onBack={() => setOpen(null)} />;
   const items = list.data?.pages.flatMap((p) => p.items) ?? [];
   return (
@@ -104,6 +195,7 @@ function Browser({ ws }: { ws: string }) {
         <Input name="q" placeholder="Search pages and databases" aria-label="Search Notion" maxLength={200} key={q ? "s" : "c"} defaultValue={q} />
         <Button type="submit" variant="outline">Search</Button>
         {q && <Button type="button" variant="ghost" onClick={() => setQ("")}>Clear</Button>}
+        <Button type="button" className="gap-2" onClick={() => setWriting(true)}><FilePlus2 className="size-4" aria-hidden />New page</Button>
       </form>
       {!q && (
         <div className="mb-3 flex flex-wrap gap-1" role="tablist" aria-label="Notion folders">

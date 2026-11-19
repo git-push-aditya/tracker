@@ -46,3 +46,12 @@ test("NotionId accepts plain and dashed UUIDs only; needsRefresh triggers a minu
   assert.equal(needsRefresh(new Date(100_000), 30_000), false);
   assert.equal(needsRefresh(new Date(100_000), 50_000), true);
 });
+
+test("createArgs uses draft mode without a parent and page_id with one; toCreated reads the new page", async () => {
+  const { createArgs, NewPage, toCreated } = await import("./notion");
+  assert.deepEqual(createArgs(NewPage.parse({ title: " Plan ", markdown: "## Hi" })), { creation_mode: "draft", pages: [{ properties: { title: "Plan" }, content: "## Hi" }] });
+  assert.deepEqual(createArgs(NewPage.parse({ title: "Plan", parentId: ID })), { parent: { type: "page_id", page_id: ID }, pages: [{ properties: { title: "Plan" }, content: "" }] });
+  assert.ok(!NewPage.safeParse({ title: "  " }).success && !NewPage.safeParse({ title: "x", parentId: "../x" }).success);
+  assert.deepEqual(toCreated({ pages: [{ id: "1a2b3c4d-5e6f-7081-92a3-b4c5d6e7f809", url: "https://app.notion.com/p/x", properties: { title: "Plan" } }] }), { id: ID, url: "https://app.notion.com/p/x" });
+  assert.throws(() => toCreated({ pages: [] }), (e: { status?: number }) => e.status === 502);
+});
