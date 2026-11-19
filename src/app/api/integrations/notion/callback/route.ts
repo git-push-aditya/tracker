@@ -1,14 +1,19 @@
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { handle } from "@/lib/http";
+import { handle, HttpError } from "@/lib/http";
 import { checkPending, exchangeCode, NOTION_ISSUER, PENDING_COOKIE, toConnection } from "@/lib/notion-auth";
 
 // Notion redirects here after Allow. This GET writes data, so the CSRF defence is the state (bound to this user, in
 // our sealed httpOnly cookie) plus PKCE, not authorize()'s same-origin check (which only covers non-GET requests).
 // Always ends on Settings: ?connected=notion (a hint; Settings re-checks) or ?notion_error=<code>.
 export const GET = handle(async (req) => {
-  const s = await requireSession(req, "integrations:notion");
+  // A browser landing here signed out (session expired during the Allow screen) goes to the login page, not raw JSON
+  const s = await requireSession(req, "integrations:notion").catch((e) => {
+    if (e instanceof HttpError && e.status === 401) return null;
+    throw e;
+  });
+  if (!s) return NextResponse.redirect(new URL("/login", req.nextUrl.origin), 303);
   const q = req.nextUrl.searchParams;
   const back = (param: string, value: string) => {
     const res = NextResponse.redirect(new URL(`/v2/settings?${param}=${value}`, req.nextUrl.origin), 303);
@@ -30,7 +35,7 @@ export const GET = handle(async (req) => {
       update: row, // reconnecting the same workspace: fresh tokens, keeps its place in the list
     });
   } catch (e) {
-    console.error("Notion connect failed", e instanceof Error ? e.message : e);
+    console.error("Notion connect failed", e instanceof HttpError ? e.status : e instanceof Error ? e.name : "error"); // never the message: it may echo token data
     return back("notion_error", "failed");
   }
   return back("connected", "notion");

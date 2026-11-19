@@ -85,7 +85,7 @@ export async function notionTool(userId: string, wsId: string | undefined, origi
       if (/HTTP 404/.test(msg) && !attempt) continue;
       if (/HTTP 401|Unauthorized/i.test(msg)) throw new HttpError(409, "Reconnect this Notion workspace in Settings", "NOTION_RECONNECT");
       if (/HTTP 429/.test(msg)) throw new HttpError(429, "Too many Notion requests, try again in a minute");
-      console.error(name, msg.slice(0, 200)); // never args or results: they hold page content
+      console.error(name, msg.match(/HTTP \d+/)?.[0] ?? (e instanceof Error ? e.name : "error")); // status only: messages can echo response bodies
       throw new HttpError(502, "Notion is unavailable", "NOTION_UNAVAILABLE"); // may or may not have run
     }
     if (r.isError) {
