@@ -85,7 +85,6 @@
   --today: #d03b3b;
   --shadow: 0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05);
   --label-w: 270px;
-  --rail: color-mix(in srgb, var(--muted) 45%, transparent); /* gantt indent guides */
   --indent-step: 22px; --indent-cap: 6; /* nested subtask indent per level, and how many levels indent at most */
 }
 
@@ -460,20 +459,18 @@ input, select, textarea, .badge, .tip, .toast, .demo-banner { font-family: var(-
    Hierarchy cues (tree-view guidance from Primer, SaaSFrame and Ahmad Shadeed's tree-indent article):
    - every row reserves the same toggle column, so a leaf task lines up exactly with a sibling that has a chevron;
    - one clear indent step per level (22px; was 14px, too close to read as a level);
-   - indent guides: a quiet vertical rail under each ancestor's chevron, plus an elbow into the row, so a subtask visibly
-     hangs off its parent and the next top-level task (no rail) can't be mistaken for one;
+   - subtasks carry a thin bar in the workstream colour under their parent's chevron and a faint tint, so a family reads
+     as one block and the next top-level task (no bar) can't be mistaken for a subtask;
    - a task "family" (a top-level task and its subtasks) starts with a stronger divider, and subtasks use lighter type. */
 .g-label > .g-sub-toggle { width: 28px; flex: none; justify-content: center; padding: 0 0 0 8px; }
 .g-label:has(.g-sub-toggle) > .g-task-btn { padding-left: 6px; }
 .g-row.is-sub .g-label {
   --lvl: min(var(--depth, 1), var(--indent-cap));
-  background-color: color-mix(in srgb, var(--surface-2) 35%, var(--surface));
-  background-image: repeating-linear-gradient(90deg, var(--rail) 0 1px, transparent 1px var(--indent-step));
-  background-size: calc(var(--lvl) * var(--indent-step)) 100%; background-position: 21px 0; background-repeat: no-repeat;
+  background: color-mix(in srgb, var(--c) 5%, var(--surface));
 }
-.g-row.is-sub .g-label::before { /* the elbow from the parent's rail into this row */
-  content: ""; position: absolute; top: 50%; height: 1px; background: var(--rail); pointer-events: none;
-  left: calc(21px + (var(--lvl) - 1) * var(--indent-step)); width: calc(var(--indent-step) - 4px);
+.g-row.is-sub .g-label::before { /* one soft bar in the workstream colour under the parent's chevron: the family's spine */
+  content: ""; position: absolute; top: 0; bottom: 0; width: 2px; border-radius: 1px; pointer-events: none;
+  left: calc(21px + (var(--lvl) - 1) * var(--indent-step)); background: color-mix(in srgb, var(--c) 55%, transparent);
 }
 .g-row.is-sub .g-label > .g-task-btn { padding-left: calc(30px + var(--lvl) * var(--indent-step)); }
 .g-row.is-sub .g-label > .g-sub-toggle { width: auto; padding-left: calc(8px + var(--lvl) * var(--indent-step)); }

@@ -114,7 +114,7 @@ export function TaskDialog({ workstreams, owners, task, parent, parentPath, wsId
           </div>
           {!sub && <Field label="Depends on" full>
             <p className="text-muted-foreground text-xs">Tick the tasks this one waits on. Draws an arrow from each prerequisite.</p>
-            <div className="max-h-40 overflow-y-auto rounded-md border p-2">
+            <div className="relative max-h-40 overflow-y-auto rounded-md border p-2" /* relative: Radix checkboxes' hidden inputs are absolute and would otherwise stretch the whole dialog's scroll area */>
               {workstreams.every((w) => w.tasks.every((x) => x.id === t.id)) && <p className="text-muted-foreground p-1 text-sm">No other tasks yet.</p>}
               {workstreams.map((w) => {
                 const others = w.tasks.filter((x) => x.id !== t.id);
