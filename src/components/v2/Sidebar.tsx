@@ -1,5 +1,5 @@
 "use client";
-import { ChevronRight, History as HistoryIcon, LayoutDashboard, LogOut, Mail, MoreVertical, PanelLeft, Plus, Search, Settings as Cog, SunMoon } from "lucide-react";
+import { BookText, ChevronRight, History as HistoryIcon, LayoutDashboard, LogOut, Mail, MoreVertical, PanelLeft, Plus, Search, Settings as Cog, SunMoon } from "lucide-react";
 import Link from "next/link";
 import { Collapsible } from "radix-ui";
 import { fmt, toDay } from "@/lib/date";
@@ -24,9 +24,9 @@ const ROW = "h-8 gap-2.5 rounded-lg px-2.5 text-[13px] text-[var(--side-ink)] [&
 const MATCH: Record<Field, string> = { name: "Matched task name", description: "Matched description", workstream: "Matched workstream", owner: "Matched owner" };
 const TINY = "text-[var(--side-icon)] hover:text-[var(--side-ink-strong)] flex size-5 items-center justify-center rounded-md hover:bg-sidebar-accent focus-visible:ring-2 ring-sidebar-ring outline-hidden";
 
-export function Sidebar({ workstreams, path, user, themeLabel, canCreate, showGoogle, onLogout, onPickTask }: {
+export function Sidebar({ workstreams, path, user, themeLabel, canCreate, showGoogle, showNotion, onLogout, onPickTask }: {
   workstreams: Workstream[]; path: string; user?: { username: string; role: string }; themeLabel: string;
-  canCreate: boolean; showGoogle: boolean; onLogout: () => void; onPickTask: (taskId: string, wsId: string) => void;
+  canCreate: boolean; showGoogle: boolean; showNotion: boolean; onLogout: () => void; onPickTask: (taskId: string, wsId: string) => void;
 }) {
   const { state, toggleSidebar } = useSidebar();
   const [q, setQ] = useState("");
@@ -91,6 +91,13 @@ export function Sidebar({ workstreams, path, user, themeLabel, canCreate, showGo
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={path === "/v2/google"} tooltip="Google" className={ROW}>
                   <Link href="/v2/google" aria-current={path === "/v2/google" ? "page" : undefined}><Mail /><span>Google</span></Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            )}
+            {showNotion && (
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={path === "/v2/notion"} tooltip="Notion" className={ROW}>
+                  <Link href="/v2/notion" aria-current={path === "/v2/notion" ? "page" : undefined}><BookText /><span>Notion</span></Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             )}

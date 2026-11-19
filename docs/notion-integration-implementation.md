@@ -1,6 +1,6 @@
 # Notion integration via Notion MCP: implementation plan
 
-Status: phase 0 spike done on 2026-11-19 (findings below). Phase 1 built: connect several workspaces, disconnect, Settings card. Phases 2–4 not started. The Google integration is on branch `connectingGoogle`; Notion uses a different route (see §0).
+Status: phase 0 spike done on 2026-11-19 (findings below). Phase 1 built: connect several workspaces, disconnect, Settings card. Phase 2 built: /v2/notion with workspace dropdown, Recent/Private/Shared/Favorites, search, page reader (react-markdown + rehype-raw + rehype-sanitize). Phases 3–4 not started. The Google integration is on branch `connectingGoogle`; Notion uses a different route (see §0).
 
 Goal: each logged-in user connects **their own** Notion workspace with a single "Allow" click. They can then:
 - browse, search and read **every page they can see in Notion**, including pages created after connecting;
@@ -29,7 +29,7 @@ Costs of this route:
 | N4 | Refresh | Access tokens last about 8 hours; read `expires_in` instead of assuming. Refresh within 60 seconds of expiry, **inside a Postgres row lock** (`SELECT … FOR UPDATE`), and save the rotated refresh token in the same transaction | Each refresh rotates the token. Two refreshes at once, or reusing a rotated token, can **revoke the whole grant**. Vercel runs many server instances, so an in-memory lock isn't enough |
 | N5 | Ended grants | `invalid_grant` is final: delete the row and return 409 `NOTION_RECONNECT`. Never retry | Notion's guidance. Refresh tokens also expire 180 days after authorization at the latest, so users reconnect about twice a year |
 | N6 | Permission | New `integrations:notion` | Separate from Google |
-| N7 | Rendering pages | `react-markdown` + `remark-gfm`, with raw HTML left off (the default) | Pages come back as Notion-flavoured markdown. Raw HTML off means page content can't inject markup |
+| N7 | Rendering pages | `react-markdown` + `remark-gfm` + `rehype-raw` + **`rehype-sanitize`** (GitHub allow-list) | Notion uses HTML-style tags for tables and toggles, so raw HTML is parsed, then sanitised: scripts, styles, iframes, event handlers and `javascript:` links are removed, unknown tags are unwrapped and keep their text |
 | N8 | Creating pages | `notion-create-pages` with title and markdown. **Default `creation_mode: "draft"`**, a private page in their workspace (confirmed), with an optional parent picker | Matches "write it here, it appears in their Notion" |
 | N9 | Editing, moving or deleting existing pages | Not in scope | Not requested; these are the destructive tools |
 | N10 | Demo mode | Feature off | Same as Google |

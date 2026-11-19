@@ -25,6 +25,7 @@ import { DeleteParentDialog, TaskDialog, type SubDraft, WorkstreamDialog } from 
 import { Footer } from "./Footer";
 import { FilterBar, Gantt, GanttPanel, GanttScroll, GanttToolbar, Legend, Tooltip } from "./Gantt";
 import { Google } from "./Google";
+import { Notion } from "./Notion";
 import { History } from "./History";
 import { Header } from "./Header";
 import { SidebarInset, SidebarProvider } from "./ui/sidebar";
@@ -72,7 +73,7 @@ function Board({ source, workstreams, today, ui, setUi, theme, me, reset }: {
   const canEdit = can(me.permissions, "task:update");
   const path = usePathname(), router = useRouter();
   const wsId = path.startsWith("/v2/ws/") ? decodeURIComponent(path.split("/")[3] ?? "") : null;
-  const view = wsId !== null ? "ws" : path.startsWith("/v2/settings") ? "settings" : path.startsWith("/v2/history") ? "history" : path.startsWith("/v2/google") ? "google" : "dashboard";
+  const view = wsId !== null ? "ws" : path.startsWith("/v2/settings") ? "settings" : path.startsWith("/v2/history") ? "history" : path.startsWith("/v2/google") ? "google" : path.startsWith("/v2/notion") ? "notion" : "dashboard";
   const wasDash = useRef(true);
 
   /* ---------- filters: options follow the data; a selection that no longer exists resets ---------- */
@@ -367,7 +368,7 @@ function Board({ source, workstreams, today, ui, setUi, theme, me, reset }: {
       <SidebarProvider className="bg-sidebar md:h-svh md:overflow-hidden" onClick={onClick}
 >
         <Sidebar workstreams={workstreams} path={path} user={me.user} themeLabel={theme.label}
-          canCreate={can(me.permissions, "workstream:create")} showGoogle={!demo && can(me.permissions, "integrations:google")} onLogout={() => void logout()} onPickTask={(id, ws) => scrollToTask(id, ws)} />
+          canCreate={can(me.permissions, "workstream:create")} showGoogle={!demo && can(me.permissions, "integrations:google")} showNotion={!demo && can(me.permissions, "integrations:notion")} onLogout={() => void logout()} onPickTask={(id, ws) => scrollToTask(id, ws)} />
         <SidebarInset className="bg-[var(--side-card)] md:h-[calc(100svh-1rem)] md:min-h-0 md:overflow-y-auto md:border md:border-[var(--side-card-border)] md:peer-data-[variant=inset]:rounded-2xl">
         <TopBar view={view} wsName={curWs?.name} />
         <main className="wrap">
@@ -397,6 +398,7 @@ function Board({ source, workstreams, today, ui, setUi, theme, me, reset }: {
             : <EmptyState panel>Workstream not found.</EmptyState>)}
           {view === "history" && <History />}
           {view === "google" && <Google />}
+          {view === "notion" && <Notion />}
           {view === "settings" && <Settings workstreams={workstreams} user={me.user} demo={demo} permissions={me.permissions} onExport={exportJson} onImport={importFile} />}
         </main>
         </SidebarInset>

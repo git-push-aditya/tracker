@@ -69,11 +69,27 @@ async function tokenRequest(body: Record<string, string>) {
   const r = await fetch(TOKEN_URL, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams(body) });
   const json = await r.json().catch(() => ({}));
   if (!r.ok) {
-    console.error("Notion token endpoint", r.status, (json as { error?: string }).error); // never the body: it may hold tokens
+    const error = (json as { error?: string }).error;
+    console.error("Notion token endpoint", r.status, error); // never the body: it may hold tokens
+    // invalid_grant = the grant is gone (revoked, 180 days old, or a rotated token replayed): final, never retry
+    if (error === "invalid_grant") throw new HttpError(409, "Reconnect this Notion workspace in Settings", "NOTION_RECONNECT");
     throw new HttpError(502, "Notion sign-in failed");
   }
   return json;
 }
+
+const Refreshed = z.object({ access_token: z.string().min(1), refresh_token: z.string().min(1), expires_in: z.number().positive() });
+
+// New sealed tokens for a refresh token. Notion rotates the refresh token every time, so the caller must save both
+// atomically (see freshToken in notion.ts, which holds a row lock).
+export async function refreshTokens(origin: string, sealedRefresh: string, now = Date.now()) {
+  const r = Refreshed.safeParse(await tokenRequest({ grant_type: "refresh_token", refresh_token: unseal(sealedRefresh), client_id: clientId(origin), resource: NOTION_RESOURCE }));
+  if (!r.success) throw new HttpError(502, "Unexpected response from Notion");
+  return { accessToken: seal(r.data.access_token), refreshToken: seal(r.data.refresh_token), expiresAt: new Date(now + r.data.expires_in * 1000) };
+}
+
+// Refresh a minute early so a token never expires mid-request.
+export const needsRefresh = (expiresAt: Date, now = Date.now()) => expiresAt.getTime() - now < 60_000;
 
 export const exchangeCode = (origin: string, code: string, verifier: string) =>
   tokenRequest({ grant_type: "authorization_code", code, code_verifier: verifier, redirect_uri: redirectUri(origin), client_id: clientId(origin), resource: NOTION_RESOURCE });
