@@ -119,6 +119,7 @@ model User {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
   sessions           Session[]
+  notion             NotionConnection[]
 
   @@index([roleId])
 }
@@ -168,4 +169,22 @@ model LoginAttempt {
 
   @@index([key, createdAt])
   @@index([createdAt])
+}
+
+// One row per Notion workspace a user connected through Notion MCP. Tokens are AES-256-GCM sealed (src/lib/crypto.ts).
+// See docs/notion-integration-implementation.md.
+model NotionConnection {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspaceId  String
+  workspace    String
+  icon         String?
+  accessToken  String
+  refreshToken String
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([userId, workspaceId])
 }

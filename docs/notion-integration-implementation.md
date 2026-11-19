@@ -1,6 +1,6 @@
 # Notion integration via Notion MCP: implementation plan
 
-Status: phase 0 spike done on 2026-11-19 (findings below); phases 1–4 not started. The Google integration is on branch `connectingGoogle`; Notion uses a different route (see §0).
+Status: phase 0 spike done on 2026-11-19 (findings below). Phase 1 built: connect several workspaces, disconnect, Settings card. Phases 2–4 not started. The Google integration is on branch `connectingGoogle`; Notion uses a different route (see §0).
 
 Goal: each logged-in user connects **their own** Notion workspace with a single "Allow" click. They can then:
 - browse, search and read **every page they can see in Notion**, including pages created after connecting;
@@ -33,7 +33,7 @@ Costs of this route:
 | N8 | Creating pages | `notion-create-pages` with title and markdown. **Default `creation_mode: "draft"`**, a private page in their workspace (confirmed), with an optional parent picker | Matches "write it here, it appears in their Notion" |
 | N9 | Editing, moving or deleting existing pages | Not in scope | Not requested; these are the destructive tools |
 | N10 | Demo mode | Feature off | Same as Google |
-| N11 | Workspaces per user | One | Several = several rows; add when someone needs it |
+| N11 | Workspaces per user | **Several.** One row per (user, workspace). The **first connected is the default**, and a dropdown on the Notion page switches between them | Requested. Each Allow grants one workspace, so "+ Add workspace" runs the sign-in again |
 
 ## 2. Phases
 
@@ -68,15 +68,20 @@ Not tested: rate-limit responses, the workspace chooser for users in several wor
 1. **Schema** (Prisma migration):
    ```prisma
    model NotionConnection {
-     userId       String   @id
-     user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-     workspace    String   // workspace_name from the token response, for Settings
-     accessToken  String   // AES-256-GCM, "iv.tag.ciphertext" base64
+     id           String   @id @default(cuid())
+     userId       String   // → User, onDelete: Cascade
+     workspaceId  String
+     workspace    String   // workspace_name from the token response
+     icon         String?
+     accessToken  String   // AES-256-GCM, "iv.tag.ciphertext" base64url
      refreshToken String
      expiresAt    DateTime
+     createdAt    DateTime @default(now())  // oldest = default workspace
      updatedAt    DateTime @updatedAt
+     @@unique([userId, workspaceId])
    }
    ```
+   RLS is enabled on the table, like every other table.
    Deleting a user removes their Notion tokens through the cascade.
 2. **`src/lib/crypto.ts`**:
    - `seal(text)` and `open(text)` with AES-256-GCM.
@@ -94,10 +99,11 @@ Not tested: rate-limit responses, the workspace chooser for users in several wor
      - redirects to `/v2/settings?connected=notion`.
 
      This GET changes data. The checks on `state`, PKCE and the session are the cross-site protection, because `authorize()`'s same-origin check only covers non-GET requests.
-   - `GET /api/integrations/notion` returns `{ status: "connected" | "none", workspace? }`.
-   - `DELETE /api/integrations/notion` revokes the token if Notion advertises a way to, then deletes the row.
+   - `GET /api/integrations/notion` returns `[{ id, workspace, icon }]`, oldest first.
+   - `DELETE /api/integrations/notion/[id]` revokes at Notion (best effort), then deletes that row (only the caller's own rows).
+   - Reconnecting a workspace that's already connected upserts it: fresh tokens, same place in the list.
 4. **Permission**: `"integrations:notion": "Connect their own Notion workspace"` in `src/lib/permissions.ts`.
-5. **Settings**: a Notion row in the "Connected accounts" card, showing the workspace name and a Connect / Disconnect / Reconnect button.
+5. **Settings**: a Notion card listing connected workspaces (icon, name, "Default" on the first when there are several, Disconnect) with a Connect Notion / "+ Add workspace" button.
    - If Notion refuses because the user is a guest or the client isn't approved, show its message. For the second case, add "Your Notion admin needs to approve Prime Care Tracker", plus the address to approve and a link to the admin note (§3).
 
 Exit: connect with one Allow click, see the workspace name, disconnect. Tokens in the DB are unreadable without the key.
@@ -120,8 +126,9 @@ Exit: connect with one Allow click, see the workspace name, disconnect. Tokens i
    - `searchPages(q)` returns the same fields plus `lastEdited`. The query must be non-empty.
    - `getPage(id)` returns `{ title, url, icon, lastEdited, markdown }`, with markdown taken from `<content>` and custom tags stripped. Databases return data-source tags; v1 shows "Open in Notion" for those.
    - Mappers are zod schemas written against the phase 0 fixtures.
-2. **Routes** (GET, `integrations:notion`): `/api/notion?q=&cursor=` and `/api/notion/pages/[id]`. The ID is checked as a Notion UUID (32 hex characters, with or without dashes).
+2. **Routes** (GET, `integrations:notion`), each taking `?ws=<connection id>` (default: the first workspace): `/api/notion?q=&cursor=` and `/api/notion/pages/[id]`. The ID is checked as a Notion UUID (32 hex characters, with or without dashes).
 3. **UI**: a `/v2/notion` page with a sidebar entry and a `TopBar` title.
+   - **Workspace dropdown** in the header (hidden with one workspace). The choice is remembered per browser and defaults to the first.
    - **Folder tabs like Gmail's**: Recent, Private, Shared, Favorites, plus a search box (search replaces the tab list while a query is typed).
    - A list showing Name (icon + title) and Type, plus Last edited in search results. "Load more" uses the cursor.
    - Opening a page shows the title, "Open in Notion" and the markdown rendered with `react-markdown`. Links open in a new tab with `noopener`; Notion's custom tags are dropped.

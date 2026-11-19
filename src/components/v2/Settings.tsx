@@ -1,5 +1,6 @@
 "use client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { GOOGLE_LABELS, GOOGLE_TOOLKITS, type GoogleStatus, type GoogleToolkit } from "@/lib/google-toolkits";
@@ -161,6 +162,60 @@ function Google() {
             </li>
           );
         })}
+      </ul>
+    </Section>
+  );
+}
+
+const NOTION_ERRORS: Record<string, string> = {
+  expired: "The Notion sign-in expired or was started in another tab. Try again.",
+  denied: "Notion connection was cancelled.",
+  failed: "Couldn't connect Notion. Try again.",
+};
+
+// Notion via Notion MCP: one Allow click per workspace, no page picker. The first workspace is the default.
+function Notion() {
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ["notion-workspaces"], queryFn: () => api<{ id: string; workspace: string; icon: string | null }[]>("GET", "/api/integrations/notion") });
+  const params = useSearchParams();
+  const [returned] = useState(() => params.get("notion_error")); // kept after the URL is tidied below
+  const act = useMutation({
+    mutationFn: async (id?: string) => {
+      if (id) return api("DELETE", `/api/integrations/notion/${id}`);
+      const { redirectUrl } = await api<{ redirectUrl: string }>("POST", "/api/integrations/notion");
+      location.assign(redirectUrl); // Notion's Allow screen, then back here via our callback
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["notion-workspaces"] }),
+  });
+  useEffect(() => {
+    const u = new URL(location.href);
+    if (u.searchParams.has("notion_error")) { u.searchParams.delete("notion_error"); history.replaceState(history.state, "", u); }
+  }, []);
+  const rows = q.data ?? [];
+  const msg = act.error ? (act.error as ApiError).message : q.error ? (q.error as ApiError).message
+    : returned === "refused" ? `Notion refused the connection. Notion guests can't connect, and some Enterprise workspaces only allow apps their admin approved. Ask your Notion admin to approve Prime Care Tracker (${location.origin}/api/integrations/notion/callback).`
+    : returned ? NOTION_ERRORS[returned] ?? NOTION_ERRORS.failed : null;
+  return (
+    <Section title="Notion" desc="Connect a Notion workspace to read and create pages here. You see everything you can see in Notion, including new pages. Connect more workspaces and switch between them on the Notion page."
+      action={q.data && <Button type="button" size="sm" variant={rows.length ? "outline" : "default"} disabled={act.isPending} onClick={() => act.mutate(undefined)}>
+        {act.isPending && !act.variables ? "…" : rows.length ? "+ Add workspace" : "Connect Notion"}
+      </Button>}>
+      {msg && <p className="text-destructive mb-3 text-sm" role="alert">{msg}</p>}
+      <ul className="divide-y">
+        {rows.map((w, i) => (
+          <li key={w.id} className="flex items-center gap-3 py-2.5">
+            {w.icon?.startsWith("https://")
+              // eslint-disable-next-line @next/next/no-img-element -- a 20px workspace icon from Notion's CDN; next/image would need remotePatterns
+              ? <img src={w.icon} alt="" className="size-5 rounded" referrerPolicy="no-referrer" />
+              : <span className="bg-muted flex size-5 items-center justify-center rounded text-xs" aria-hidden>{w.icon || w.workspace[0]}</span>}
+            <b className="text-sm">{w.workspace}</b>
+            {i === 0 && rows.length > 1 && <Badge variant="secondary">Default</Badge>}
+            <Button className="ml-auto" size="sm" variant="outline" type="button" disabled={act.isPending} onClick={() => act.mutate(w.id)}>
+              {act.isPending && act.variables === w.id ? "…" : "Disconnect"}
+            </Button>
+          </li>
+        ))}
+        {q.data && !rows.length && <li className="text-muted-foreground py-2.5 text-sm">No workspace connected.</li>}
       </ul>
     </Section>
   );
@@ -332,6 +387,7 @@ export function Settings({ workstreams, user, demo, permissions, onExport, onImp
       <div className="mt-6 grid gap-6">
         {demo ? <Card><CardContent className="text-muted-foreground text-sm">Account and team settings need the database; this is demo mode.</CardContent></Card> : <Account />}
         {!demo && can(permissions, "integrations:google") && <Google />}
+        {!demo && can(permissions, "integrations:notion") && <Notion />}
         <Workstreams workstreams={workstreams} canCreate={can(permissions, "workstream:create")} canEdit={can(permissions, "workstream:update")} />
         {!demo && can(permissions, "actors:manage") && <People />}
         {!demo && can(permissions, "users:manage") && can(permissions, "roles:read") && <Team me={user?.username ?? ""} />}
