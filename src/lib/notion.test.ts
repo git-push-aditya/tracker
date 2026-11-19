@@ -55,3 +55,24 @@ test("createArgs uses draft mode without a parent and page_id with one; toCreate
   assert.deepEqual(toCreated({ pages: [{ id: "1a2b3c4d-5e6f-7081-92a3-b4c5d6e7f809", url: "https://app.notion.com/p/x", properties: { title: "Plan" } }] }), { id: ID, url: "https://app.notion.com/p/x" });
   assert.throws(() => toCreated({ pages: [] }), (e: { status?: number }) => e.status === 502);
 });
+
+test("icons: Notion-internal paths load from notion.so, junk is dropped; titles lose a repeated emoji", async () => {
+  const { iconOf } = await import("./notion");
+  assert.equal(iconOf("/icons/notepad_blue.svg"), "https://www.notion.so/icons/notepad_blue.svg");
+  assert.equal(iconOf("https://cdn.example/x.png"), "https://cdn.example/x.png");
+  assert.equal(iconOf("👋"), "👋");
+  assert.equal(iconOf("javascript:alert(1)"), "");
+  assert.equal(iconOf("folder.svg"), "");
+  assert.equal(iconOf(null), "");
+  const l = toList({ results: [{ type: "database", url: `https://app.notion.com/p/${ID}`, title: "Docs", icon: "/icons/folder_blue.svg" }] });
+  assert.equal(l.items[0].icon, "https://www.notion.so/icons/folder_blue.svg");
+  const p = toPage({ metadata: { type: "page" }, title: "👋 Getting Started", url: null, text: "<content>x</content>", icon: { type: "emoji", emoji: "👋" } });
+  assert.equal(p.title, "Getting Started");
+});
+
+test("notionTool refuses tools and update commands outside the allow-list before touching Notion", async () => {
+  const { notionTool } = await import("./notion");
+  await assert.rejects(notionTool("u", undefined, "http://x", "notion-delete-pages", { page_ids: ["a"] }), /not allowed/);
+  await assert.rejects(notionTool("u", undefined, "http://x", "notion-update-page", { page_id: "a", command: "apply_template" }), /not allowed/);
+  await assert.rejects(notionTool("u", undefined, "http://x", "notion-update-page", { page_id: "a", command: "replace_content", new_str: "", allow_deleting_content: true }), /not allowed/);
+});

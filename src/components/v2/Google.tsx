@@ -1,11 +1,12 @@
 "use client";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { PenLine, Reply as Reply1, Send as SendIcon, Trash2, X } from "lucide-react";
+import { ExternalLink, PenLine, Reply as Reply1, Send as SendIcon, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { emitToast } from "@/lib/toast";
 import { cn } from "@/lib/v2-utils";
+import { Markdown } from "./Markdown";
 import { Button } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
 import { Input } from "./ui/input";
@@ -273,10 +274,10 @@ function FilesTab({ kind }: { kind: "docs" | "sheets" }) {
     <div>
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="sm" onClick={() => setOpen(null)}>← Back</Button>
-        <b className="truncate text-sm">{open.name}</b>
-        {open.link && <a className="ml-auto text-xs underline" href={open.link} target="_blank" rel="noreferrer">Open in Google</a>}
+        {kind !== "docs" && <b className="truncate text-sm">{open.name}</b>}
+        {open.link && <a className="ml-auto inline-flex items-center gap-1 text-xs underline" href={open.link} target="_blank" rel="noopener noreferrer">Open in Google <ExternalLink className="size-3" /></a>}
       </div>
-      {kind === "docs" ? <DocView id={open.id} /> : <SheetView id={open.id} />}
+      {kind === "docs" ? <DocView id={open.id} name={open.name} /> : <SheetView id={open.id} />}
     </div>
   );
   return (
@@ -305,11 +306,16 @@ function FilesTab({ kind }: { kind: "docs" | "sheets" }) {
   );
 }
 
-function DocView({ id }: { id: string }) {
-  const q = useQuery({ queryKey: ["google", "doc", id], ...fresh, queryFn: () => api<{ title: string; text: string }>("GET", `/api/google/docs/${id}`) });
-  if (q.isPending) return <Rows />;
-  if (q.error) return <Problem error={q.error} />;
-  return <pre className="mt-3 font-sans text-sm break-words whitespace-pre-wrap">{q.data.text || "(empty document)"}</pre>;
+// The doc as formatted markdown (headings, lists, tables, links), laid out like a page. Images stay in Google.
+function DocView({ id, name }: { id: string; name: string }) {
+  const q = useQuery({ queryKey: ["google", "doc", id], ...fresh, queryFn: () => api<{ title: string; markdown: string }>("GET", `/api/google/docs/${id}`) });
+  return (
+    <article className="bg-background mx-auto mt-4 max-w-3xl rounded-lg border px-6 py-8 shadow-sm sm:px-12 sm:py-10">
+      <h2 className="mb-6 text-3xl font-bold">{q.data?.title || name}</h2>
+      {q.isPending ? <Rows /> : q.error ? <Problem error={q.error} />
+        : q.data.markdown ? <Markdown markdown={q.data.markdown} /> : <p className="text-muted-foreground text-sm">This document is empty.</p>}
+    </article>
+  );
 }
 
 function SheetView({ id }: { id: string }) {

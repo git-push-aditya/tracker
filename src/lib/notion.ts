@@ -11,8 +11,11 @@ import { prisma } from "./prisma";
 // The server exposes ~60 tools, including edit, move and delete. We only ever call these.
 const ALLOWED = new Set([
   "notion-list-recent-pages", "notion-list-private-pages", "notion-list-shared-pages", "notion-list-favorite-pages",
-  "notion-search", "notion-fetch", "notion-create-pages",
+  "notion-search", "notion-fetch", "notion-create-pages", "notion-update-page",
 ]);
+// notion-update-page can also apply templates and, with allow_deleting_content, drop child pages: we only rename and
+// replace text, and Notion then refuses edits that would delete child pages or databases.
+const UPDATE_COMMANDS = new Set(["update_properties", "replace_content"]);
 export const FOLDERS = { recent: "notion-list-recent-pages", private: "notion-list-private-pages", shared: "notion-list-shared-pages", favorites: "notion-list-favorite-pages" } as const;
 
 type Conn = { id: string; accessToken: string; expiresAt: Date };
@@ -72,6 +75,8 @@ const forget = (connId: string) => { clients.get(connId)?.client.then((c) => c.c
 // before running it (401 token, 404 expired MCP session), so a create is never sent twice.
 export async function notionTool(userId: string, wsId: string | undefined, origin: string, name: string, args: Record<string, unknown>) {
   if (!ALLOWED.has(name)) throw new Error(`Notion tool not allowed: ${name}`);
+  if (name === "notion-update-page" && (!UPDATE_COMMANDS.has(String(args.command)) || "allow_deleting_content" in args))
+    throw new Error("Notion update not allowed");
   const conn = await connection(userId, wsId);
   let token = await freshToken(origin, conn);
   for (let attempt = 0; ; attempt++) {
@@ -114,6 +119,11 @@ export const idFromUrl = (url: string) => {
 
 export type NotionItem = { id: string; title: string; icon: string; url: string; kind: "page" | "database"; edited: string };
 const kindOf = (t: string): NotionItem["kind"] => (t === "database" ? "database" : "page");
+// Icons come as an emoji, a full URL, or a Notion-internal path like "/icons/notepad_blue.svg" (served by notion.so)
+export const iconOf = (i?: string | null) => !i ? "" : i.startsWith("https://") ? i : i.startsWith("/icons/") ? `https://www.notion.so${i}`
+  : !/[/.:]/.test(i) && i.length <= 16 ? i : "";
+// Fetched titles repeat the emoji icon ("👋 Getting Started"); the UI shows the icon separately
+const titleOf = (t: string | null | undefined, icon: string) => (t?.trim() && icon && !icon.startsWith("https://") && t.trim().startsWith(icon) ? t.trim().slice(icon.length) : t)?.trim() || "Untitled";
 
 const ListResult = z.object({
   results: z.array(z.object({ type: z.string(), url: z.string(), title: str, icon: str })),
@@ -121,7 +131,7 @@ const ListResult = z.object({
 });
 export function toList(data: unknown) {
   const d = upstream(ListResult, data);
-  const items: NotionItem[] = d.results.map((r) => ({ id: idFromUrl(r.url), title: r.title?.trim() || "Untitled", icon: r.icon ?? "", url: r.url, kind: kindOf(r.type), edited: "" }));
+  const items: NotionItem[] = d.results.map((r) => { const icon = iconOf(r.icon); return { id: idFromUrl(r.url), title: titleOf(r.title, icon), icon, url: r.url, kind: kindOf(r.type), edited: "" }; });
   return { items: items.filter((i) => i.id), cursor: d.nextCursor ?? d.next_cursor ?? null };
 }
 
@@ -135,14 +145,15 @@ export function toSearch(data: unknown) {
 
 const Fetched = z.object({
   title: str, url: str, text: z.string(), page_last_edited_at: str,
-  icon: z.object({ emoji: str }).passthrough().nullish(), metadata: z.object({ type: z.string() }).passthrough(),
+  icon: z.object({ emoji: str, url: str, external: z.object({ url: str }).nullish() }).passthrough().nullish(), metadata: z.object({ type: z.string() }).passthrough(),
 });
 // Page text is Notion-flavoured markup: <page><ancestor-path/>…<properties/>…<content>MARKDOWN</content></page>.
 // We keep the <content> part; remaining Notion tags are sanitised (unknown ones unwrapped) when rendered.
 export function toPage(data: unknown) {
   const d = upstream(Fetched, data);
   const content = d.text.match(/<content>([\s\S]*)<\/content>/)?.[1] ?? d.text;
-  return { title: d.title?.trim() || "Untitled", url: d.url ?? "", icon: d.icon?.emoji ?? "", edited: d.page_last_edited_at ?? "", kind: kindOf(d.metadata.type), markdown: content.trim() };
+  const icon = iconOf(d.icon?.emoji ?? d.icon?.url ?? d.icon?.external?.url);
+  return { title: titleOf(d.title, icon), url: d.url ?? "", icon, edited: d.page_last_edited_at ?? "", kind: kindOf(d.metadata.type), markdown: content.trim() };
 }
 
 // --- Creating ------------------------------------------------------------------------------------------------------
@@ -161,3 +172,13 @@ export function toCreated(data: unknown) {
   const p = upstream(Created, data).pages[0];
   return { id: p.id.replace(/-/g, ""), url: p.url };
 }
+
+// --- Editing -------------------------------------------------------------------------------------------------------
+export const EditPage = z.object({
+  ws: z.string().max(40).optional(),
+  title: z.string().trim().min(1, "Give the page a title").max(200),
+  markdown: z.string().max(100_000),
+  loadedAt: z.string().max(100), // page_last_edited_at when the editor opened: refuse to overwrite newer changes
+});
+export const renameArgs = (page_id: string, title: string) => ({ page_id, command: "update_properties", properties: { title } });
+export const replaceArgs = (page_id: string, new_str: string) => ({ page_id, command: "replace_content", new_str });

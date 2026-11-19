@@ -118,9 +118,60 @@ export const toSheetList = (data: unknown) => {
   const d = upstream(z.object({ spreadsheets: z.array(File).nullish().transform((v) => v ?? []), next_page_token: str }), data);
   return { files: d.spreadsheets.map(toFile), nextPage: d.next_page_token || null };
 };
+// A Google Doc (Docs API JSON from GOOGLEDOCS_GET_DOCUMENT_BY_ID) as markdown: headings, bullet and numbered lists,
+// tables, bold, italic, links and smart chips. Images, drawings, colours and fonts are dropped (open in Google for those).
+// Only the top level is schema-checked; the body is walked defensively because docs can be ~1MB of nested JSON.
+type Json = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any -- walked defensively below
+const DocJson = z.object({ title: str, body: z.object({ content: z.array(z.record(z.string(), z.unknown())).nullish() }).nullish(), lists: z.record(z.string(), z.unknown()).nullish() });
+const esc = (t: string) => t.replace(/[\\`*_[\]<>|~]/g, "\\$&");
+const HEADING: Record<string, string> = { TITLE: "#", HEADING_1: "#", HEADING_2: "##", HEADING_3: "###", HEADING_4: "####", HEADING_5: "#####", HEADING_6: "######" };
+
+function runText(el: Json, heading: boolean) {
+  if (el.richLink) { const p = el.richLink.richLinkProperties ?? {}; return p.uri ? `[${esc(p.title || p.uri)}](${p.uri})` : esc(p.title ?? ""); }
+  if (el.dateElement) return esc(el.dateElement.dateElementProperties?.displayText ?? "");
+  if (el.person) return esc(el.person.personProperties?.name ?? el.person.personProperties?.email ?? "");
+  const raw: string = el.textRun?.content ?? "";
+  const text = esc(raw.replace(/\n$/, "")).replace(/\u000b/g, heading ? " " : "<br>"); // \u000b = Shift+Enter line break
+  const st = el.textRun?.textStyle ?? {};
+  const core = text.trim();
+  if (!core) return text;
+  let out = core;
+  if (st.bold && !heading) out = `**${out}**`;
+  if (st.italic) out = `*${out}*`;
+  if (st.link?.url) out = `[${out}](${st.link.url})`;
+  return text.slice(0, text.indexOf(core[0])) + out + text.slice(text.lastIndexOf(core.at(-1)!) + 1); // spaces stay outside the markers
+}
+const paraText = (p: Json, heading = false) => (p.elements ?? []).map((el: Json) => runText(el, heading)).join("").trim();
+// A paragraph that happens to start with "1." or "-" must not turn into a list
+const blockSafe = (t: string) => t.replace(/^(\d+)\.(\s)/, "$1\\.$2").replace(/^([#>+-])(\s)/, "\\$1$2");
+
 export const toDoc = (data: unknown) => {
-  const d = upstream(z.object({ title: str, plain_text: str }), data);
-  return { title: d.title ?? "", text: d.plain_text ?? "" };
+  const d = upstream(DocJson, data);
+  const lists = (d.lists ?? {}) as Json;
+  const blocks: { text: string; list: boolean }[] = [];
+  for (const el of (d.body?.content ?? []) as Json[]) {
+    if (el.paragraph) {
+      const p = el.paragraph, style: string = p.paragraphStyle?.namedStyleType ?? "NORMAL_TEXT";
+      const text = paraText(p, !!HEADING[style]);
+      if (!text) continue;
+      if (p.bullet) {
+        const level: number = p.bullet.nestingLevel ?? 0;
+        const glyph = lists[p.bullet.listId]?.listProperties?.nestingLevels?.[level] ?? {};
+        const ordered = !glyph.glyphSymbol && glyph.glyphType && glyph.glyphType !== "GLYPH_TYPE_UNSPECIFIED" && glyph.glyphType !== "NONE";
+        blocks.push({ text: `${"    ".repeat(level)}${ordered ? "1." : "-"} ${text}`, list: true });
+      } else blocks.push({ text: HEADING[style] ? `${HEADING[style]} ${text}` : style === "SUBTITLE" ? `*${text}*` : blockSafe(text), list: false });
+    } else if (el.table) {
+      const rows: string[][] = (el.table.tableRows ?? []).map((r: Json) => (r.tableCells ?? []).map((c: Json) =>
+        (c.content ?? []).filter((x: Json) => x.paragraph).map((x: Json) => paraText(x.paragraph)).filter(Boolean).join("<br>")));
+      const cols = Math.max(0, ...rows.map((r) => r.length));
+      if (!cols) continue;
+      const line = (r: string[]) => `| ${Array.from({ length: cols }, (_, i) => r[i] ?? "").join(" | ")} |`;
+      blocks.push({ text: [line(rows[0]), line(Array(cols).fill("---")), ...rows.slice(1).map(line)].join("\n"), list: false });
+    }
+  }
+  // List items sit on consecutive lines; everything else is separated by a blank line
+  const markdown = blocks.map((b, i) => (i && !(b.list && blocks[i - 1].list) ? "\n\n" : i ? "\n" : "") + b.text).join("");
+  return { title: d.title ?? "", markdown };
 };
 export const toValues = (data: unknown) => {
   const d = upstream(z.object({ range: str, values: z.array(z.array(z.unknown())).nullish().transform((v) => v ?? []) }), data);

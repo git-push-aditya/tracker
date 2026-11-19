@@ -31,7 +31,7 @@ Costs of this route:
 | N6 | Permission | New `integrations:notion` | Separate from Google |
 | N7 | Rendering pages | `react-markdown` + `remark-gfm` + `rehype-raw` + **`rehype-sanitize`** (GitHub allow-list) | Notion uses HTML-style tags for tables and toggles, so raw HTML is parsed, then sanitised: scripts, styles, iframes, event handlers and `javascript:` links are removed, unknown tags are unwrapped and keep their text |
 | N8 | Creating pages | `notion-create-pages` with title and markdown. **Default `creation_mode: "draft"`**, a private page in their workspace (confirmed), with an optional parent picker | Matches "write it here, it appears in their Notion" |
-| N9 | Editing, moving or deleting existing pages | Not in scope | Not requested; these are the destructive tools |
+| N9 | Editing existing pages | **Built (2026-11-20):** rename and replace the body (`notion-update-page` with `update_properties` / `replace_content` only, never `allow_deleting_content`). Saving refuses (409) if the page changed in Notion after the editor opened. Moving and deleting stay out of scope | Requested. Notion itself refuses a body that would delete child pages or databases |
 | N10 | Demo mode | Feature off | Same as Google |
 | N11 | Workspaces per user | **Several.** One row per (user, workspace). The **first connected is the default**, and a dropdown on the Notion page switches between them | Requested. Each Allow grants one workspace, so "+ Add workspace" runs the sign-in again |
 

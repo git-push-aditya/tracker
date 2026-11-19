@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { GoogleId, SendMail, takeSend, toDocList, toEvents, toMailList, toSheetList, toThread, toValues } from "./google";
+import { GoogleId, SendMail, takeSend, toDoc, toDocList, toEvents, toMailList, toSheetList, toThread, toValues } from "./google";
 
 // Synthetic fixtures shaped like the live Composio responses (checked against a real account in phase 2; no real data here).
 test("toMailList maps messages, unread flag and page token; extra fields are dropped", () => {
@@ -73,4 +73,40 @@ test("send: recipients must be emails; at most 30 sends per hour per user", () =
   assert.throws(() => takeSend("u-cap", 2000), (e: { status?: number }) => e.status === 429);
   takeSend("u-other", 2000); // other users unaffected
   takeSend("u-cap", 1000 + 3_600_000); // the oldest one has aged out
+});
+
+test("toDoc turns Docs API JSON into markdown: headings, lists, tables, styles, links, escaping", () => {
+  const run = (content: string, textStyle: object = {}) => ({ textRun: { content, textStyle } });
+  const para = (elements: object[], namedStyleType = "NORMAL_TEXT", bullet?: object) => ({ paragraph: { elements, paragraphStyle: { namedStyleType }, ...(bullet && { bullet }) } });
+  const r = toDoc({
+    title: "Plan",
+    lists: { b: { listProperties: { nestingLevels: [{ glyphSymbol: "●" }, { glyphSymbol: "○" }] } }, n: { listProperties: { nestingLevels: [{ glyphType: "DECIMAL" }] } } },
+    body: { content: [
+      { sectionBreak: {} },
+      para([run("Goals\n")], "HEADING_1"),
+      para([run("Ship "), run("fast", { bold: true }), run(" and "), run("safe ", { italic: true }), run("docs", { link: { url: "https://x.io" } }), run("\n")]),
+      para([run("1. not a list * star\n")]),
+      para([run("line one\u000bline two\n")]),
+      para([run("\n")]),
+      para([run("first\n")], "NORMAL_TEXT", { listId: "b" }),
+      para([run("nested\n")], "NORMAL_TEXT", { listId: "b", nestingLevel: 1 }),
+      para([run("step\n")], "NORMAL_TEXT", { listId: "n" }),
+      { table: { tableRows: [
+        { tableCells: [{ content: [para([run("A\n")])] }, { content: [para([run("B|C\n")])] }] },
+        { tableCells: [{ content: [para([run("1\n")])] }, { content: [para([run("2\n")]), para([run("3\n")])] }] },
+      ] } },
+      para([{ richLink: { richLinkProperties: { title: "Spec", uri: "https://docs.google.com/d/1" } } }, run("\n")]),
+    ] },
+  });
+  assert.equal(r.title, "Plan");
+  assert.equal(r.markdown, [
+    "# Goals", "",
+    "Ship **fast** and *safe* [docs](https://x.io)", "",
+    "1\\. not a list \\* star", "",
+    "line one<br>line two", "",
+    "- first", "    - nested", "1. step", "",
+    "| A | B\\|C |", "| --- | --- |", "| 1 | 2<br>3 |", "",
+    "[Spec](https://docs.google.com/d/1)",
+  ].join("\n"));
+  assert.throws(() => toDoc({ title: 1 }), (e: { status?: number }) => e.status === 502);
 });
