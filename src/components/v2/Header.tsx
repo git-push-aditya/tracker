@@ -14,13 +14,6 @@ export function Header({ todayLabel, todayIso, canEdit }: {
       </div>
       <div className="actions">
         {canEdit && <Button id="btnAddTask" type="button">+ Add task</Button>}
-        <Button variant="outline" id="btnExport" type="button">Export JSON</Button>
-        {canEdit && (
-          <>
-            <Button variant="outline" id="btnImport" type="button">Import JSON</Button>
-            <input type="file" id="fileImport" accept="application/json,.json" hidden />
-          </>
-        )}
       </div>
     </header>
   );

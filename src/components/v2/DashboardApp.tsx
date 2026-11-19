@@ -9,13 +9,13 @@ import { useTheme } from "@/hooks/useTheme";
 import { useToday } from "@/hooks/useToday";
 import { useUiState, type Ui } from "@/hooks/useUiState";
 import { allTasks, anyFilter, findTask, matches, NO_FILTERS, taskOwners, type Filters } from "@/lib/dashboard";
-import { parentChangeError, rollupProgress } from "@/lib/subtasks";
+import { descendants, parentChangeError, rollupProgress } from "@/lib/subtasks";
 import { buildTask, uid, type TaskForm, type WorkstreamValues } from "@/lib/dashboard-ops";
 import { fmt, iso, parts, toDay } from "@/lib/date";
 import { layoutGantt } from "@/lib/gantt-layout";
-import { normalizeImport } from "@/lib/import";
+import { EXPORT_FORMAT, ImportError, normalizeImport } from "@/lib/import";
 import { can } from "@/lib/auth-rules";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import type { Subtask, Task, Workstream } from "@/lib/schemas";
 import { onToast } from "@/lib/toast";
 import { AttentionList } from "./Attention";
@@ -24,6 +24,8 @@ import type { SubActions } from "./Subtasks";
 import { DeleteParentDialog, TaskDialog, type SubDraft, WorkstreamDialog } from "./Dialogs";
 import { Footer } from "./Footer";
 import { FilterBar, Gantt, GanttPanel, GanttScroll, GanttToolbar, Legend, Tooltip } from "./Gantt";
+import { Google } from "./Google";
+import { Notion } from "./Notion";
 import { History } from "./History";
 import { Header } from "./Header";
 import { SidebarInset, SidebarProvider } from "./ui/sidebar";
@@ -45,7 +47,7 @@ export function DashboardApp() {
   const today = useToday();
   const q = useDashboard();
   const { ui, setUi, loaded } = useUiState();
-  const theme = useTheme();
+  useTheme(); // applies the saved theme; it's chosen in Settings → Appearance
   const me = useMe();
 
   if (today === null || !loaded || !me.ready || (!q.data && !q.isError)) return <div className="wrap" />;
@@ -56,14 +58,14 @@ export function DashboardApp() {
       </div>
     );
   return (
-    <Board source={q.data.source} workstreams={q.data.workstreams} today={today} ui={ui} setUi={setUi} theme={theme} me={me}
+    <Board source={q.data.source} workstreams={q.data.workstreams} today={today} ui={ui} setUi={setUi} me={me}
       reset={async () => { await q.refetch(); }} />
   );
 }
 
-function Board({ source, workstreams, today, ui, setUi, theme, me, reset }: {
+function Board({ source, workstreams, today, ui, setUi, me, reset }: {
   source: "demo" | "db"; workstreams: Workstream[]; today: number; ui: Ui; setUi: (p: (u: Ui) => Partial<Ui>) => void;
-  theme: ReturnType<typeof useTheme>; me: ReturnType<typeof useMe>; reset: () => Promise<void>;
+  me: ReturnType<typeof useMe>; reset: () => Promise<void>;
 }) {
   const saveTask = useSaveTask(), saveSub = useSaveSubtask(), promoteSub = usePromoteSubtask(), deleteTask = useDeleteTask(), deleteKeep = useDeleteTaskKeepSubtasks(), saveWs = useSaveWorkstream(), deleteWs = useDeleteWorkstream(), importData = useImport();
   const demo = source === "demo";
@@ -71,7 +73,7 @@ function Board({ source, workstreams, today, ui, setUi, theme, me, reset }: {
   const canEdit = can(me.permissions, "task:update");
   const path = usePathname(), router = useRouter();
   const wsId = path.startsWith("/v2/ws/") ? decodeURIComponent(path.split("/")[3] ?? "") : null;
-  const view = wsId !== null ? "ws" : path.startsWith("/v2/settings") ? "settings" : path.startsWith("/v2/history") ? "history" : "dashboard";
+  const view = wsId !== null ? "ws" : path.startsWith("/v2/settings") ? "settings" : path.startsWith("/v2/history") ? "history" : path.startsWith("/v2/google") ? "google" : path.startsWith("/v2/notion") ? "notion" : "dashboard";
   const wasDash = useRef(true);
 
   /* ---------- filters: options follow the data; a selection that no longer exists resets ---------- */
@@ -286,20 +288,27 @@ function Board({ source, workstreams, today, ui, setUi, theme, me, reset }: {
   }
 
   /* ---------- export / import / reset ---------- */
-  function exportJson() {
-    const blob = new Blob([JSON.stringify({ workstreams }, (k, v) => (k === "updatedAt" ? undefined : v), 2)], { type: "application/json" });
+  // DB: the server's full export (people, history, created dates too). Demo: what's in this browser session.
+  async function exportJson() {
+    let data;
+    try { data = demo ? { ...EXPORT_FORMAT, exportedAt: new Date().toISOString(), workstreams } : await api("GET", "/api/export"); }
+    catch (e) { toast(e instanceof ApiError ? e.message : "Export failed"); return; }
+    const blob = new Blob([JSON.stringify(data, (k, v) => (k === "updatedAt" ? undefined : v), 2)], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob); a.download = `prime-care-dashboard-${iso(today)}.json`;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-    toast("Exported JSON");
+    toast("Exported");
   }
   async function importFile(file: File) {
     let d;
     try { d = normalizeImport(JSON.parse(await file.text())); }
-    catch { alert("That file isn't valid dashboard JSON. It needs a top-level \"workstreams\" array."); return; }
-    if (!confirm(`Replace the current data with ${d.workstreams.length} workstreams from "${file.name}"?`)) return;
-    importData.mutateAsync(d.workstreams).then(() => { refreshHistory(); refreshActors(); }, () => {}); requestToday(); toast("Imported " + file.name);
+    catch (e) { alert(e instanceof ImportError ? `Can't import "${file.name}": ${e.message}` : "That file isn't valid dashboard JSON. It needs a top-level \"workstreams\" array."); return; }
+    const n = d.workstreams.flatMap((w) => w.tasks.flatMap((t) => [t, ...descendants(t)])).length;
+    const extras = demo ? "" : `${d.people.length ? `, ${d.people.length} people` : ""}${d.history.length ? ` and ${d.history.length} history entries (added to the existing history)` : ""}`;
+    if (!confirm(`Replace all workstreams and tasks with ${d.workstreams.length} workstreams and ${n} tasks${extras} from "${file.name}"?`)) return;
+    try { await importData.mutateAsync(d); } catch { return; } // useEdit already showed the error
+    refreshHistory(); refreshActors(); requestToday(); toast(`Imported ${file.name}`);
   }
   async function resetSample() {
     if (!confirm("Replace all current data with the built-in sample data? Export first if you want to keep your changes.")) return;
@@ -337,9 +346,6 @@ function Board({ source, workstreams, today, ui, setUi, theme, me, reset }: {
     if (id === "btnClearFilters") return setPicked(NO_FILTERS);
     if (id === "btnAddTask") return openTask(null);
     if (id === "btnAddWs") return openWs(null);
-    if (id === "btnExport") return exportJson();
-    if (id === "btnImport") return document.getElementById("fileImport")?.click();
-    if (id === "btnTheme") return theme.cycle();
     if (id === "btnReset") return void resetSample();
     if (id === "btnLogout") return void logout();
   }
@@ -359,12 +365,9 @@ function Board({ source, workstreams, today, ui, setUi, theme, me, reset }: {
   return (
     <>
       <SidebarProvider className="bg-sidebar md:h-svh md:overflow-hidden" onClick={onClick}
-        onChange={(e) => {
-          const t = e.target as HTMLInputElement;
-          if (t.id === "fileImport" && t.files?.[0]) { void importFile(t.files[0]); t.value = ""; }
-        }}>
-        <Sidebar workstreams={workstreams} path={path} user={me.user} themeLabel={theme.label}
-          canCreate={can(me.permissions, "workstream:create")} onLogout={() => void logout()} onPickTask={(id, ws) => scrollToTask(id, ws)} />
+>
+        <Sidebar workstreams={workstreams} path={path} user={me.user}
+          canCreate={can(me.permissions, "workstream:create")} showGoogle={!demo && can(me.permissions, "integrations:google")} showNotion={!demo && can(me.permissions, "integrations:notion")} onLogout={() => void logout()} onPickTask={(id, ws) => scrollToTask(id, ws)} />
         <SidebarInset className="bg-[var(--side-card)] md:h-[calc(100svh-1rem)] md:min-h-0 md:overflow-y-auto md:border md:border-[var(--side-card-border)] md:peer-data-[variant=inset]:rounded-2xl">
         <TopBar view={view} wsName={curWs?.name} />
         <main className="wrap">
@@ -393,7 +396,9 @@ function Board({ source, workstreams, today, ui, setUi, theme, me, reset }: {
             ? <div className="ws-page"><WorkstreamCard ws={curWs} vis={curWs.tasks} all={workstreams} today={today} open canEdit={canEdit} owners={people} subActions={subActions} /></div>
             : <EmptyState panel>Workstream not found.</EmptyState>)}
           {view === "history" && <History />}
-          {view === "settings" && <Settings workstreams={workstreams} user={me.user} demo={demo} permissions={me.permissions} />}
+          {view === "google" && <Google />}
+          {view === "notion" && <Notion />}
+          {view === "settings" && <Settings workstreams={workstreams} user={me.user} demo={demo} permissions={me.permissions} onExport={exportJson} onImport={importFile} />}
         </main>
         </SidebarInset>
       </SidebarProvider>
